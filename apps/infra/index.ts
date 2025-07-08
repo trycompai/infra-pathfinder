@@ -1,5 +1,6 @@
 import * as aws from "@pulumi/aws";
 import * as awsx from "@pulumi/awsx";
+import * as pulumi from "@pulumi/pulumi";
 
 // VPC with public subnets for ALB and private subnets for containers
 const vpc = new awsx.ec2.Vpc("pathfinder-vpc");
@@ -157,9 +158,7 @@ const service = new awsx.ecs.FargateService("pathfinder-service", {
 const scaling = new aws.appautoscaling.Target("pathfinder-scaling", {
   maxCapacity: 10,
   minCapacity: 2,
-  resourceId: service.service.name.apply(
-    (name) => `service/${cluster.name}/${name}`
-  ),
+  resourceId: pulumi.interpolate`service/${cluster.name}/${service.service.name}`,
   scalableDimension: "ecs:service:DesiredCount",
   serviceNamespace: "ecs",
 });
