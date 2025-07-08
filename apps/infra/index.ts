@@ -136,6 +136,16 @@ const service = new awsx.ecs.FargateService("pathfinder-service", {
       cpu: 512, // 0.5 vCPU
       memory: 1024, // 1GB - Next.js needs this
       essential: true,
+      environment: [
+        {
+          name: "HOSTNAME",
+          value: "0.0.0.0", // Critical: bind to all interfaces, not just localhost
+        },
+        {
+          name: "PORT",
+          value: "3000",
+        },
+      ],
       portMappings: [
         {
           containerPort: 3000,
