@@ -48,8 +48,19 @@ Infrastructure commands are available from the root:
 bun run infra:install    # Install infrastructure dependencies
 bun run infra:preview    # Preview infrastructure changes
 bun run infra:up         # Deploy infrastructure
-bun run infra:destroy    # Destroy infrastructure
+bun run infra:destroy    # Tear down infrastructure
 ```
+
+## CI/CD Deployment (Recommended for Apple Silicon users)
+
+Local Docker builds on Apple Silicon can be slow due to x86 emulation. We've set up GitHub Actions for faster deployments:
+
+- **Push to main** → Automatic deployment
+- **Open a PR** → See infrastructure preview
+
+See [CI/CD Setup Guide](docs/CI_SETUP.md) for configuration instructions.
+
+## Remote Development
 
 ## Turborepo
 
