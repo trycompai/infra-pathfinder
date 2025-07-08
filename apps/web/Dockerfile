@@ -24,6 +24,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Cache bust to force rebuild
+LABEL build_date="2024-12-08-15:08"
+
 # Copy only necessary files
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
