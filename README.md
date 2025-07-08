@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Pathfinder Monorepo
+
+A modern monorepo powered by [Turborepo](https://turbo.build) and [Bun](https://bun.sh).
+
+## What's inside?
+
+This monorepo includes the following packages/apps:
+
+### Apps
+
+- `@pathfinder/web`: A [Next.js](https://nextjs.org/) app
+- `infra`: [Pulumi](https://pulumi.com/) infrastructure as code for AWS deployment
+
+### Packages
+
+- (Add shared packages here as you grow)
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- [Bun](https://bun.sh) installed
+- [Node.js](https://nodejs.org/) 18+
+- AWS credentials configured (for infrastructure deployment)
+
+### Development
+
+To develop all apps and packages, run:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
+bun install
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Build
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+To build all apps and packages, run:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+bun build
+```
 
-## Learn More
+### Infrastructure
 
-To learn more about Next.js, take a look at the following resources:
+Infrastructure commands are available from the root:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+bun run infra:install    # Install infrastructure dependencies
+bun run infra:preview    # Preview infrastructure changes
+bun run infra:up         # Deploy infrastructure
+bun run infra:destroy    # Destroy infrastructure
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Turborepo
 
-## Deploy on Vercel
+This monorepo uses [Turborepo](https://turbo.build) for:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- **Smart caching** - Only rebuild what changed
+- **Parallel execution** - Run tasks in parallel
+- **Task dependencies** - Ensure tasks run in the right order
+- **Remote caching** - Share cache artifacts across machines
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Learn more about Turborepo in their [documentation](https://turbo.build/repo/docs).
+
+## Useful Commands
+
+- `bun dev` - Start all apps in development mode
+- `bun build` - Build all apps for production
+- `bun lint` - Lint all apps
+- `bun type-check` - Type check all apps

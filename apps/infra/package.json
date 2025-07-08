@@ -1,0 +1,13 @@
+{
+  "name": "pathfinder-infra",
+  "main": "index.ts",
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@pulumi/aws": "^6.83.0",
+    "@pulumi/awsx": "^2.22.0",
+    "@pulumi/pulumi": "^3.181.0"
+  }
+}
