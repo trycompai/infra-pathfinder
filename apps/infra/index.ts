@@ -1,11 +1,33 @@
 import * as aws from "@pulumi/aws";
 import * as awsx from "@pulumi/awsx";
 import * as pulumi from "@pulumi/pulumi";
+import * as random from "@pulumi/random";
+
+// ==========================================
+// CONFIGURATION & SHARED SETTINGS
+// ==========================================
+
+// Common tags for all resources
+const commonTags = {
+  Project: "pathfinder",
+  Environment: pulumi.getStack(), // Will be "dev", "staging", "production" etc.
+  ManagedBy: "pulumi",
+  Owner: "platform-team",
+  CreatedDate: new Date().toISOString().split("T")[0], // YYYY-MM-DD
+};
+
+// ==========================================
+// NETWORKING LAYER
+// VPC, Subnets, Security Groups
+// ==========================================
 
 // VPC with public subnets for ALB and private subnets for containers
-const vpc = new awsx.ec2.Vpc("pathfinder-vpc");
-
-const cluster = new aws.ecs.Cluster("pathfinder-cluster");
+const vpc = new awsx.ec2.Vpc("pathfinder-vpc", {
+  tags: {
+    ...commonTags,
+    Name: "pathfinder-vpc",
+  },
+});
 
 // Security Groups
 // ALB: Allow HTTP from internet
@@ -27,6 +49,11 @@ const albSecurityGroup = new aws.ec2.SecurityGroup("pathfinder-alb-sg", {
       cidrBlocks: ["0.0.0.0/0"],
     },
   ],
+  tags: {
+    ...commonTags,
+    Name: "pathfinder-alb-sg",
+    Type: "load-balancer",
+  },
 });
 
 // Service: Only accept traffic from ALB (not directly from internet)
@@ -50,13 +77,174 @@ const serviceSecurityGroup = new aws.ec2.SecurityGroup(
         cidrBlocks: ["0.0.0.0/0"],
       },
     ],
+    tags: {
+      ...commonTags,
+      Name: "pathfinder-service-sg",
+      Type: "ecs-service",
+    },
   }
 );
 
-// Load Balancer with health checks
+// Database Security Group - only allow access from the service
+const dbSecurityGroup = new aws.ec2.SecurityGroup("pathfinder-db-sg", {
+  vpcId: vpc.vpcId,
+  ingress: [
+    {
+      protocol: "tcp",
+      fromPort: 5432,
+      toPort: 5432,
+      securityGroups: [serviceSecurityGroup.id], // Only allow from ECS service
+    },
+  ],
+  egress: [
+    {
+      protocol: "-1",
+      fromPort: 0,
+      toPort: 0,
+      cidrBlocks: ["0.0.0.0/0"],
+    },
+  ],
+  tags: {
+    ...commonTags,
+    Name: "pathfinder-db-sg",
+    Type: "database",
+  },
+});
+
+// ==========================================
+// DATABASE LAYER
+// RDS PostgreSQL with auto-scaling storage
+// ==========================================
+
+// RDS Subnet Group - database should be in private subnets
+const dbSubnetGroup = new aws.rds.SubnetGroup("pathfinder-db-subnet-group", {
+  subnetIds: vpc.privateSubnetIds,
+  tags: {
+    ...commonTags,
+    Name: "pathfinder-db-subnet-group",
+  },
+});
+
+// Generate a secure random password for the database
+const dbPassword = new random.RandomPassword("pathfinder-db-password", {
+  length: 32,
+  special: true,
+  overrideSpecial: "!@#$%&*()-_=+[]{}<>:?", // Avoid problematic characters in connection strings
+});
+
+// RDS PostgreSQL Instance
+const db = new aws.rds.Instance("pathfinder-db", {
+  engine: "postgres",
+  engineVersion: "15.4",
+  instanceClass: "db.t3.small", // Upgraded from micro: 2 vCPU, 2 GB RAM
+  allocatedStorage: 50, // 50 GB (up from 20 GB)
+  maxAllocatedStorage: 1000, // Auto-scale storage up to 1 TB as needed
+  storageType: "gp3",
+  storageEncrypted: true, // Enable encryption at rest
+  dbName: "pathfinder",
+  username: "pathfinder_admin",
+  password: dbPassword.result, // Use the generated secure password
+  vpcSecurityGroupIds: [dbSecurityGroup.id],
+  dbSubnetGroupName: dbSubnetGroup.name,
+  skipFinalSnapshot: true, // For dev - set to false in production
+  deletionProtection: false, // For dev - set to true in production
+  backupRetentionPeriod: 7, // Keep backups for 7 days
+  backupWindow: "03:00-04:00", // 3-4 AM UTC
+  maintenanceWindow: "sun:04:00-sun:05:00", // Sunday 4-5 AM UTC
+  enabledCloudwatchLogsExports: ["postgresql"], // Export logs to CloudWatch
+  tags: {
+    ...commonTags,
+    Name: "pathfinder-db",
+    Engine: "postgresql",
+    Tier: "database",
+  },
+});
+
+// ==========================================
+// MONITORING & OBSERVABILITY
+// CloudWatch Alarms for proactive monitoring
+// ==========================================
+
+// Database Monitoring
+const dbHighCPUAlarm = new aws.cloudwatch.MetricAlarm(
+  "pathfinder-db-high-cpu",
+  {
+    comparisonOperator: "GreaterThanThreshold",
+    evaluationPeriods: 2,
+    metricName: "CPUUtilization",
+    namespace: "AWS/RDS",
+    period: 300, // 5 minutes
+    statistic: "Average",
+    threshold: 80,
+    alarmDescription: "Triggers when database CPU exceeds 80% for 10 minutes",
+    dimensions: {
+      DBInstanceIdentifier: db.id,
+    },
+    tags: {
+      ...commonTags,
+      Name: "pathfinder-db-high-cpu-alarm",
+      Type: "monitoring",
+    },
+  }
+);
+
+const dbHighConnectionsAlarm = new aws.cloudwatch.MetricAlarm(
+  "pathfinder-db-high-connections",
+  {
+    comparisonOperator: "GreaterThanThreshold",
+    evaluationPeriods: 2,
+    metricName: "DatabaseConnections",
+    namespace: "AWS/RDS",
+    period: 300, // 5 minutes
+    statistic: "Average",
+    threshold: 80, // db.t3.small has max ~100 connections, so 80 is 80%
+    alarmDescription: "Triggers when database connections exceed 80",
+    dimensions: {
+      DBInstanceIdentifier: db.id,
+    },
+    tags: {
+      ...commonTags,
+      Name: "pathfinder-db-high-connections-alarm",
+      Type: "monitoring",
+    },
+  }
+);
+
+const dbLowStorageAlarm = new aws.cloudwatch.MetricAlarm(
+  "pathfinder-db-low-storage",
+  {
+    comparisonOperator: "LessThanThreshold",
+    evaluationPeriods: 1,
+    metricName: "FreeStorageSpace",
+    namespace: "AWS/RDS",
+    period: 300, // 5 minutes
+    statistic: "Average",
+    threshold: 5 * 1024 * 1024 * 1024, // 5 GB in bytes
+    alarmDescription: "Triggers when free storage drops below 5 GB",
+    dimensions: {
+      DBInstanceIdentifier: db.id,
+    },
+    tags: {
+      ...commonTags,
+      Name: "pathfinder-db-low-storage-alarm",
+      Type: "monitoring",
+    },
+  }
+);
+
+// ==========================================
+// LOAD BALANCING & TRAFFIC MANAGEMENT
+// Application Load Balancer with health checks
+// ==========================================
+
 const lb = new awsx.lb.ApplicationLoadBalancer("pathfinder-lb", {
   subnetIds: vpc.publicSubnetIds,
   securityGroups: [albSecurityGroup.id],
+  tags: {
+    ...commonTags,
+    Name: "pathfinder-lb",
+    Type: "application-load-balancer",
+  },
   defaultTargetGroup: {
     port: 3000,
     protocol: "HTTP",
@@ -73,9 +261,27 @@ const lb = new awsx.lb.ApplicationLoadBalancer("pathfinder-lb", {
   },
 });
 
+// ==========================================
+// CONTAINER INFRASTRUCTURE
+// ECR, ECS Service, IAM Roles, Logging
+// ==========================================
+
+// ECS Cluster
+const cluster = new aws.ecs.Cluster("pathfinder-cluster", {
+  tags: {
+    ...commonTags,
+    Name: "pathfinder-cluster",
+  },
+});
+
 // Logging
 const logGroup = new aws.cloudwatch.LogGroup("pathfinder-logs", {
   retentionInDays: 7,
+  tags: {
+    ...commonTags,
+    Name: "pathfinder-logs",
+    Type: "application-logs",
+  },
 });
 
 // ECS needs this role to pull images and write logs
@@ -102,7 +308,12 @@ new aws.iam.RolePolicyAttachment("pathfinder-execution-role-policy", {
 
 // ECR for storing Docker images
 const repo = new awsx.ecr.Repository("pathfinder-repo", {
-  forceDelete: true,
+  forceDelete: true, // Allow deletion even if images exist
+  tags: {
+    ...commonTags,
+    Name: "pathfinder-repo",
+    Type: "container-registry",
+  },
 });
 
 // This builds AND pushes your Docker image to ECR automatically:
@@ -145,6 +356,10 @@ const service = new awsx.ecs.FargateService("pathfinder-service", {
           name: "PORT",
           value: "3000",
         },
+        {
+          name: "DATABASE_URL",
+          value: pulumi.interpolate`postgresql://${db.username}:${db.password}@${db.endpoint}/${db.dbName}`,
+        },
       ],
       portMappings: [
         {
@@ -164,7 +379,11 @@ const service = new awsx.ecs.FargateService("pathfinder-service", {
   },
 });
 
-// Auto-scaling: 2-10 tasks based on CPU
+// ==========================================
+// AUTO-SCALING CONFIGURATION
+// Automatically scale ECS tasks based on CPU
+// ==========================================
+
 const scaling = new aws.appautoscaling.Target("pathfinder-scaling", {
   maxCapacity: 10,
   minCapacity: 2,
@@ -189,4 +408,90 @@ const scalingPolicy = new aws.appautoscaling.Policy(
   }
 );
 
+// ==========================================
+// ADDITIONAL MONITORING
+// ECS Service and Load Balancer health checks
+// ==========================================
+
+const ecsHighCPUAlarm = new aws.cloudwatch.MetricAlarm(
+  "pathfinder-ecs-high-cpu",
+  {
+    comparisonOperator: "GreaterThanThreshold",
+    evaluationPeriods: 2,
+    metricName: "CPUUtilization",
+    namespace: "AWS/ECS",
+    period: 300, // 5 minutes
+    statistic: "Average",
+    threshold: 80,
+    alarmDescription:
+      "Triggers when ECS service CPU exceeds 80% (may trigger auto-scaling)",
+    dimensions: {
+      ClusterName: cluster.name,
+      ServiceName: service.service.name,
+    },
+    tags: {
+      ...commonTags,
+      Name: "pathfinder-ecs-high-cpu-alarm",
+      Type: "monitoring",
+    },
+  }
+);
+
+const albUnhealthyHostsAlarm = new aws.cloudwatch.MetricAlarm(
+  "pathfinder-alb-unhealthy-hosts",
+  {
+    comparisonOperator: "GreaterThanThreshold",
+    evaluationPeriods: 2,
+    metricName: "UnHealthyHostCount",
+    namespace: "AWS/ApplicationELB",
+    period: 60, // 1 minute
+    statistic: "Average",
+    threshold: 0,
+    alarmDescription: "Triggers when ALB has unhealthy targets",
+    dimensions: {
+      LoadBalancer: lb.loadBalancer.arnSuffix,
+      TargetGroup: lb.defaultTargetGroup.arnSuffix,
+    },
+    treatMissingData: "notBreaching",
+    tags: {
+      ...commonTags,
+      Name: "pathfinder-alb-unhealthy-alarm",
+      Type: "monitoring",
+    },
+  }
+);
+
+const albResponseTimeAlarm = new aws.cloudwatch.MetricAlarm(
+  "pathfinder-alb-high-response-time",
+  {
+    comparisonOperator: "GreaterThanThreshold",
+    evaluationPeriods: 3,
+    metricName: "TargetResponseTime",
+    namespace: "AWS/ApplicationELB",
+    period: 60, // 1 minute
+    statistic: "Average",
+    threshold: 2, // 2 seconds
+    alarmDescription: "Triggers when response time exceeds 2 seconds",
+    dimensions: {
+      LoadBalancer: lb.loadBalancer.arnSuffix,
+    },
+    treatMissingData: "notBreaching",
+    tags: {
+      ...commonTags,
+      Name: "pathfinder-alb-response-time-alarm",
+      Type: "monitoring",
+    },
+  }
+);
+
+// ==========================================
+// STACK OUTPUTS
+// Values accessible after deployment
+// ==========================================
+
 export const url = lb.loadBalancer.dnsName.apply((dns) => `http://${dns}`);
+export const dbEndpoint = db.endpoint;
+export const dbConnectionString = pulumi.interpolate`postgresql://${db.username}:${db.password}@${db.endpoint}/${db.dbName}`;
+// Export password as a secret - only visible via CLI with --show-secrets flag
+export const dbPasswordSecret = pulumi.secret(dbPassword.result);
+export const dbUsername = db.username;
