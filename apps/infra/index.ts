@@ -133,8 +133,8 @@ const service = new awsx.ecs.FargateService("pathfinder-service", {
     container: {
       name: "pathfinder-app",
       image: image.imageUri,
-      cpu: 512, // 0.5 vCPU
-      memory: 1024, // 1GB - Next.js needs this
+      cpu: 1024, // 1 vCPU
+      memory: 2048, // 2GB
       essential: true,
       environment: [
         {
