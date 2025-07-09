@@ -5,15 +5,34 @@ import { NextResponse } from "next/server";
 // GET /api/todos - List all todos
 export async function GET() {
   try {
+    console.log("Starting todos fetch...");
+
+    // Test database connection first
+    console.log("Testing basic database connection...");
+    await db.execute("SELECT 1");
+    console.log("Database connection OK");
+
+    // Try the actual query
+    console.log("Executing todos query...");
     const allTodos = await db
       .select()
       .from(todos)
       .orderBy(desc(todos.createdAt));
+
+    console.log(`Found ${allTodos.length} todos`);
     return NextResponse.json(allTodos);
   } catch (error) {
-    console.error("Failed to fetch todos:", error);
+    console.error("Detailed error in todos fetch:", {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      name: error instanceof Error ? error.name : undefined,
+    });
+
     return NextResponse.json(
-      { error: "Failed to fetch todos" },
+      {
+        error: "Failed to fetch todos",
+        details: error instanceof Error ? error.message : String(error),
+      },
       { status: 500 }
     );
   }
