@@ -46,14 +46,22 @@ jobs:
         run: |
           echo "🚀 Running database migrations..."
 
+          # Discover the actual cluster and service names
+          echo "Discovering ECS cluster and service names..."
+          CLUSTER_NAME=$(aws ecs list-clusters --query 'clusterArns[?contains(@, `pathfinder-cluster`)]' --output text | head -1 | awk -F'/' '{print $NF}')
+          SERVICE_NAME=$(aws ecs list-services --cluster $CLUSTER_NAME --query 'serviceArns[?contains(@, `pathfinder-service`)]' --output text | head -1 | awk -F'/' '{print $NF}')
+
+          echo "Using cluster: $CLUSTER_NAME"
+          echo "Using service: $SERVICE_NAME"
+
           # Wait for service to be stable after deployment
           echo "Waiting for ECS service to be stable..."
-          aws ecs wait services-stable --cluster pathfinder-cluster --services pathfinder-service
+          aws ecs wait services-stable --cluster $CLUSTER_NAME --services $SERVICE_NAME
 
           # Get the latest task definition ARN
           TASK_DEF_ARN=$(aws ecs describe-services \
-            --cluster pathfinder-cluster \
-            --services pathfinder-service \
+            --cluster $CLUSTER_NAME \
+            --services $SERVICE_NAME \
             --query 'services[0].taskDefinition' \
             --output text)
 
@@ -61,10 +69,10 @@ jobs:
 
           # Run the migration task
           TASK_ARN=$(aws ecs run-task \
-            --cluster pathfinder-cluster \
+            --cluster $CLUSTER_NAME \
             --task-definition $TASK_DEF_ARN \
             --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[$(aws ec2 describe-subnets --filters "Name=tag:Name,Values=*pathfinder-vpc-private*" --query 'Subnets[*].SubnetId' --output text | tr '\t' ',')],securityGroups=[$(aws ec2 describe-security-groups --filters "Name=tag:Name,Values=pathfinder-service-sg" --query 'SecurityGroups[0].GroupId' --output text)],assignPublicIp=ENABLED}" \
+            --network-configuration "awsvpcConfiguration={subnets=[$(aws ec2 describe-subnets --filters "Name=tag:Name,Values=*pathfinder-vpc-private*" --query 'Subnets[*].SubnetId' --output text | tr '\t' ',')],securityGroups=[$(aws ec2 describe-security-groups --filters "Name=tag:Name,Values=*pathfinder-service-sg*" --query 'SecurityGroups[0].GroupId' --output text)],assignPublicIp=ENABLED}" \
             --overrides '{"containerOverrides":[{"name":"pathfinder-app","command":["bun","run","db:migrate"]}]}' \
             --query 'tasks[0].taskArn' \
             --output text)
@@ -72,11 +80,11 @@ jobs:
           echo "Migration task started: $TASK_ARN"
 
           # Wait for migration to complete
-          aws ecs wait tasks-stopped --cluster pathfinder-cluster --tasks $TASK_ARN
+          aws ecs wait tasks-stopped --cluster $CLUSTER_NAME --tasks $TASK_ARN
 
           # Check if migration succeeded
           EXIT_CODE=$(aws ecs describe-tasks \
-            --cluster pathfinder-cluster \
+            --cluster $CLUSTER_NAME \
             --tasks $TASK_ARN \
             --query 'tasks[0].containers[0].exitCode' \
             --output text)
