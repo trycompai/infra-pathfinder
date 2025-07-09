@@ -1,33 +1,26 @@
-import { db } from "@/db";
+import { db, todos } from "@/db";
+import { count } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 export async function GET() {
   try {
-    // Check if todos table exists
-    const tableExists = await db.execute(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = 'todos'
-      );
-    `);
-
-    // Try to count todos
+    // Test if we can access the todos table using Drizzle
     let todoCount = null;
     let todoCountError = null;
+    let tableAccessible = false;
 
     try {
-      const countResult = await db.execute(
-        "SELECT COUNT(*) as count FROM todos"
-      );
-      todoCount = countResult.rows[0];
+      const countResult = await db.select({ count: count() }).from(todos);
+      todoCount = countResult[0]?.count || 0;
+      tableAccessible = true;
     } catch (error) {
       todoCountError = error instanceof Error ? error.message : String(error);
+      tableAccessible = false;
     }
 
     return NextResponse.json({
       status: "success",
-      tableExists: tableExists.rows[0],
+      tableAccessible,
       todoCount,
       todoCountError,
     });

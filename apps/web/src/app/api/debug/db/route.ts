@@ -1,15 +1,17 @@
-import { db } from "@/db";
+import { db, todos } from "@/db";
+import { count } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 export async function GET() {
   try {
-    // Test basic database connection
-    const result = await db.execute("SELECT 1 as test");
+    // Test basic database connection using Drizzle selectors
+    const result = await db.select({ count: count() }).from(todos);
 
     return NextResponse.json({
       status: "success",
       message: "Database connection works",
-      result: result.rows,
+      tableAccessible: true,
+      todoCount: result[0]?.count || 0,
     });
   } catch (error) {
     return NextResponse.json(

@@ -2,9 +2,40 @@ import { db, todos } from "@/db";
 import { count, desc } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
+interface DebugStep {
+  step: number;
+  action?: string;
+  result?: string;
+  todoCount?: number;
+  todosReturned?: number;
+  todoId?: number;
+  title?: string;
+  message?: string;
+}
+
+interface ErrorInfo {
+  message: string;
+  name: string;
+  stack?: string;
+  code?: string;
+  detail?: string;
+  hint?: string;
+}
+
+interface DebugInfo {
+  timestamp: string;
+  steps: DebugStep[];
+  environment?: {
+    NODE_ENV: string | undefined;
+    DATABASE_URL_exists: boolean;
+    DATABASE_URL_length: number;
+  };
+  error?: ErrorInfo;
+}
+
 // GET /api/todos - List all todos
 export async function GET() {
-  const debugInfo: any = {
+  const debugInfo: DebugInfo = {
     timestamp: new Date().toISOString(),
     steps: [],
     environment: {
@@ -57,9 +88,9 @@ export async function GET() {
       message: error instanceof Error ? error.message : String(error),
       name: error instanceof Error ? error.name : "Unknown",
       stack: error instanceof Error ? error.stack : undefined,
-      code: (error as any)?.code,
-      detail: (error as any)?.detail,
-      hint: (error as any)?.hint,
+      code: (error as { code?: string })?.code,
+      detail: (error as { detail?: string })?.detail,
+      hint: (error as { hint?: string })?.hint,
     };
 
     debugInfo.error = errorInfo;
