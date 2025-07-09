@@ -120,12 +120,53 @@ jobs:
             --query 'tasks[0].containers[0].exitCode' \
             --output text)
 
+                    # Get the actual log group name from Pulumi stack outputs
+          LOG_GROUP_NAME=$(aws logs describe-log-groups --log-group-name-prefix "pathfinder-logs" --query 'logGroups[0].logGroupName' --output text)
+
+          # Get the log stream name for this specific task
+          TASK_ID=$(echo $TASK_ARN | awk -F'/' '{print $NF}')
+          LOG_STREAM_NAME="pathfinder/$TASK_ID"
+
+          echo "📋 Getting logs from CloudWatch:"
+          echo "   Log group: $LOG_GROUP_NAME"
+          echo "   Log stream: $LOG_STREAM_NAME"
+
           if [ "$EXIT_CODE" != "0" ]; then
             echo "❌ Migration failed with exit code: $EXIT_CODE"
+            echo ""
+            echo "🔍 Migration task logs:"
+            echo "----------------------------------------"
+            
+            # Get logs from CloudWatch - retry a few times as logs may take a moment to appear
+            for i in {1..5}; do
+              if aws logs get-log-events \
+                --log-group-name "$LOG_GROUP_NAME" \
+                --log-stream-name "$LOG_STREAM_NAME" \
+                --query 'events[*].message' \
+                --output text 2>/dev/null; then
+                break
+              fi
+              echo "Waiting for logs to appear (attempt $i/5)..."
+              sleep 10
+            done
+            
+            echo "----------------------------------------"
             exit 1
           fi
 
           echo "✅ Migrations completed successfully!"
+          echo ""
+          echo "📋 Migration logs:"
+          echo "----------------------------------------"
+
+          # Show successful migration logs too
+          aws logs get-log-events \
+            --log-group-name "$LOG_GROUP_NAME" \
+            --log-stream-name "$LOG_STREAM_NAME" \
+            --query 'events[*].message' \
+            --output text 2>/dev/null || echo "Could not retrieve logs"
+
+          echo "----------------------------------------"
 
       - name: Migration complete
         run: |
