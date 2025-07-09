@@ -16,7 +16,7 @@ export const env = createEnv({
   experimental__runtimeEnv: {
     // No client env vars currently
   },
-  // Enable skipping validation via environment variable
+  // Allow skipping validation for development scenarios
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
   emptyStringAsUndefined: true,
 });
