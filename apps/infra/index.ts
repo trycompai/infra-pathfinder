@@ -323,7 +323,7 @@ const imageUri = new awsx.ecr.Image("pathfinder-image", {
   platform: "linux/amd64", // Required for AWS Fargate
 }).imageUri;
 
-// Fargate Service
+// Fargate Service with init container for migrations
 const service = new awsx.ecs.FargateService("pathfinder-service", {
   cluster: cluster.arn,
   networkConfiguration: {
@@ -336,42 +336,75 @@ const service = new awsx.ecs.FargateService("pathfinder-service", {
     executionRole: {
       roleArn: executionRole.arn,
     },
-    container: {
-      name: "pathfinder-app",
-      image: imageUri,
-      cpu: 1024, // 1 vCPU
-      memory: 2048, // 2GB
-      essential: true,
-      environment: [
-        {
-          name: "HOSTNAME",
-          value: "0.0.0.0", // Critical: bind to all interfaces, not just localhost
+    containers: {
+      // Init container that runs migrations first
+      "migration-runner": {
+        name: "migration-runner",
+        image: imageUri,
+        cpu: 256, // 0.25 vCPU
+        memory: 512, // 512MB - enough for migrations
+        essential: false, // This container can exit after migrations complete
+        environment: [
+          {
+            name: "DATABASE_URL",
+            value: pulumi.interpolate`postgresql://${db.username}:${db.password}@${db.endpoint}/${db.dbName}`,
+          },
+        ],
+        command: ["bun", "run", "scripts/run-migrations.ts"],
+        workingDirectory: "/app",
+        logConfiguration: {
+          logDriver: "awslogs",
+          options: {
+            "awslogs-group": logGroup.name,
+            "awslogs-region": aws.config.region,
+            "awslogs-stream-prefix": "pathfinder-migrations",
+          },
         },
-        {
-          name: "PORT",
-          value: "3000",
-        },
-        {
-          name: "DATABASE_URL",
-          value: pulumi.interpolate`postgresql://${db.username}:${db.password}@${db.endpoint}/${db.dbName}`,
-        },
-        {
-          name: "ENABLE_DEBUG_ENDPOINTS",
-          value: "true", // Temporary: for debugging environment variables
-        },
-      ],
-      portMappings: [
-        {
-          containerPort: 3000,
-          targetGroup: lb.defaultTargetGroup,
-        },
-      ],
-      logConfiguration: {
-        logDriver: "awslogs",
-        options: {
-          "awslogs-group": logGroup.name,
-          "awslogs-region": aws.config.region,
-          "awslogs-stream-prefix": "pathfinder",
+      },
+      // Main application container
+      "pathfinder-app": {
+        name: "pathfinder-app",
+        image: imageUri,
+        cpu: 1024, // 1 vCPU
+        memory: 2048, // 2GB
+        essential: true,
+        dependsOn: [
+          {
+            containerName: "migration-runner",
+            condition: "SUCCESS", // Wait for migrations to complete successfully
+          },
+        ],
+        environment: [
+          {
+            name: "HOSTNAME",
+            value: "0.0.0.0", // Critical: bind to all interfaces, not just localhost
+          },
+          {
+            name: "PORT",
+            value: "3000",
+          },
+          {
+            name: "DATABASE_URL",
+            value: pulumi.interpolate`postgresql://${db.username}:${db.password}@${db.endpoint}/${db.dbName}`,
+          },
+          {
+            name: "ENABLE_DEBUG_ENDPOINTS",
+            value: "true", // Temporary: for debugging environment variables
+          },
+        ],
+        portMappings: [
+          {
+            containerPort: 3000,
+            targetGroup: lb.defaultTargetGroup,
+          },
+        ],
+        logConfiguration: {
+          logDriver: "awslogs",
+          options: {
+            "awslogs-group": logGroup.name,
+            "awslogs-region": aws.config.region,
+            "awslogs-stream-prefix": "pathfinder-app",
+          },
         },
       },
     },
