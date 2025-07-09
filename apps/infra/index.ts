@@ -135,7 +135,7 @@ const dbPassword = new random.RandomPassword("pathfinder-db-password", {
 // RDS PostgreSQL Instance
 const db = new aws.rds.Instance("pathfinder-db", {
   engine: "postgres",
-  engineVersion: "15.4",
+  engineVersion: "15.13", // Updated to latest available version
   instanceClass: "db.t3.small", // Upgraded from micro: 2 vCPU, 2 GB RAM
   allocatedStorage: 50, // 50 GB (up from 20 GB)
   maxAllocatedStorage: 1000, // Auto-scale storage up to 1 TB as needed
