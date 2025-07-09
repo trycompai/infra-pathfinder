@@ -98,24 +98,6 @@ jobs:
 
           echo "Using task definition: $TASK_DEF_ARN"
 
-          # Debug: Check what's available in the container
-          echo "🔍 Debugging container environment..."
-          DEBUG_TASK_ARN=$(aws ecs run-task \
-            --cluster $CLUSTER_NAME \
-            --task-definition $TASK_DEF_ARN \
-            --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[$(aws ec2 describe-subnets --filters "Name=tag:Name,Values=*pathfinder-vpc-private*" --query 'Subnets[*].SubnetId' --output text | tr '\t' ',')],securityGroups=[$(aws ec2 describe-security-groups --filters "Name=tag:Name,Values=*pathfinder-service-sg*" --query 'SecurityGroups[0].GroupId' --output text)],assignPublicIp=ENABLED}" \
-            --overrides '{"containerOverrides":[{"name":"pathfinder-app","command":["sh","-c","echo Working directory: $(pwd) && ls -la && echo === Package.json exists: === && ls -la package.json && echo === Bun location: === && which bun && echo === Node modules: === && ls -la node_modules | head -10 && echo === Scripts directory: === && ls -la scripts/"]}]}' \
-            --query 'tasks[0].taskArn' \
-            --output text)
-
-          echo "Debug task started: $DEBUG_TASK_ARN"
-          aws ecs wait tasks-stopped --cluster $CLUSTER_NAME --tasks $DEBUG_TASK_ARN
-
-          # Show debug output
-          echo "=== Debug Task Output ==="
-          aws ecs describe-tasks --cluster $CLUSTER_NAME --tasks $DEBUG_TASK_ARN --query 'tasks[0].containers[0].exitCode'
-
           # Run the migration task
           TASK_ARN=$(aws ecs run-task \
             --cluster $CLUSTER_NAME \
