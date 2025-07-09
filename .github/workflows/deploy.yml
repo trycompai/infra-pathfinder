@@ -36,10 +36,9 @@ jobs:
       # Login to ECR (needed for Docker push)
       - name: Login to Amazon ECR
         id: login-ecr
-        uses:
-          aws-actions/amazon-ecr-login@v2
+        uses: aws-actions/amazon-ecr-login@v2
 
-          # Deploy everything through Pulumi (handles Docker building and infrastructure)
+      # Deploy everything through Pulumi (handles Docker building and infrastructure)
       - name: Deploy with Pulumi
         run: |
           cd apps/infra
