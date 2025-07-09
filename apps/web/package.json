@@ -14,6 +14,7 @@
     "db:migrate:runtime": "tsx scripts/run-migrations.ts",
     "db:check": "drizzle-kit check",
     "db:drop": "drizzle-kit drop",
+    "test:env": "tsx scripts/test-env.ts",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
