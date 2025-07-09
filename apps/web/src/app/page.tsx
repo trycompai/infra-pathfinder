@@ -1,4 +1,4 @@
-import { env } from "../env";
+import { env } from "@/env";
 import TodoApp from "./components/TodoApp";
 
 function redactDatabaseUrl(url: string): string {
