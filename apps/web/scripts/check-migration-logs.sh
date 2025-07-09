@@ -47,4 +47,4 @@ done
 
 echo ""
 echo "💡 To see all logs for a specific task:"
-echo "   aws logs get-log-events --log-group-name '$LOG_GROUP_NAME' --log-stream-name 'pathfinder/TASK_ID' --query 'events[*].message' --output text" 
+echo "   aws logs get-log-events --log-group-name '$LOG_GROUP_NAME' --log-stream-name 'pathfinder/pathfinder-app/TASK_ID' --query 'events[*].message' --output text" 
