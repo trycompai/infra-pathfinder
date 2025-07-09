@@ -1,6 +1,7 @@
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import path from "path";
 import { db } from "../src/db";
+import { env } from "../src/env";
 
 async function runMigrations() {
   console.log("🚀 Starting database migrations...");
@@ -8,7 +9,7 @@ async function runMigrations() {
     `📁 Migration directory: ${path.join(__dirname, "../src/db/migrations")}`
   );
   console.log(
-    `🔗 Database URL: ${process.env.DATABASE_URL?.replace(/:[^@]+@/, ":***@")}`
+    `🔗 Database URL: ${env.DATABASE_URL.replace(/:[^@]+@/, ":***@")}`
   ); // Hide password
 
   try {

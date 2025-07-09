@@ -1,3 +1,4 @@
+import { env } from "../env";
 import TodoApp from "./components/TodoApp";
 
 function redactDatabaseUrl(url: string): string {
@@ -17,8 +18,7 @@ function redactDatabaseUrl(url: string): string {
 }
 
 export default function Home() {
-  const databaseUrl = process.env.DATABASE_URL || "";
-  const redactedUrl = redactDatabaseUrl(databaseUrl);
+  const redactedUrl = redactDatabaseUrl(env.DATABASE_URL);
 
   return <TodoApp databaseUrl={redactedUrl} />;
 }

@@ -1,14 +1,12 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
+import { env } from "../env";
 import * as schema from "./schema";
 
-// Create a connection pool
+// Create a connection pool using validated environment variables
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl:
-    process.env.NODE_ENV === "production"
-      ? { rejectUnauthorized: false }
-      : false,
+  connectionString: env.DATABASE_URL,
+  ssl: env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
 });
 
 // Create the database instance
