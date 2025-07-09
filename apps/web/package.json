@@ -14,6 +14,7 @@
     "db:migrate:runtime": "tsx scripts/run-migrations.ts",
     "db:check": "drizzle-kit check",
     "db:drop": "drizzle-kit drop",
+    "debug:env": "node -e \"console.log('DATABASE_URL exists:', !!process.env.DATABASE_URL); console.log('DATABASE_URL length:', process.env.DATABASE_URL?.length || 0); console.log('All env vars:', Object.keys(process.env).length);\"",
     "test:env": "tsx scripts/test-env.ts",
     "type-check": "tsc --noEmit"
   },
