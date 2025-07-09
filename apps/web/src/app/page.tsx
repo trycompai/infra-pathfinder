@@ -22,13 +22,15 @@ export default function Home() {
 
   try {
     databaseUrl = env.DATABASE_URL;
-    debugInfo = "✅ env.DATABASE_URL accessed successfully";
+    debugInfo = `✅ env.DATABASE_URL accessed successfully (length: ${
+      databaseUrl?.length || 0
+    })`;
   } catch (error) {
     debugInfo = `❌ env.DATABASE_URL failed: ${error}`;
     // Fallback to raw env
     if (process.env.DATABASE_URL) {
       databaseUrl = process.env.DATABASE_URL;
-      debugInfo += " | ✅ process.env.DATABASE_URL fallback worked";
+      debugInfo += ` | ✅ process.env.DATABASE_URL fallback worked (length: ${databaseUrl.length})`;
     } else {
       debugInfo += " | ❌ process.env.DATABASE_URL also empty";
     }
@@ -47,10 +49,13 @@ export default function Home() {
           background: "yellow",
           padding: "5px",
           fontSize: "12px",
-          maxWidth: "300px",
+          maxWidth: "400px",
+          zIndex: 1000,
         }}
       >
-        DEBUG: {debugInfo}
+        <div>DEBUG: {debugInfo}</div>
+        <div>Raw URL length: {databaseUrl?.length || 0}</div>
+        <div>Redacted result: {redactedUrl}</div>
       </div>
     </div>
   );
