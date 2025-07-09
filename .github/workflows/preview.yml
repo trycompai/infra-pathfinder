@@ -18,15 +18,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.2.8
-
-      - name: Setup Node.js (for Pulumi)
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Install pnpm
-        run: npm install -g pnpm
+          bun-version: latest
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -37,11 +29,11 @@ jobs:
 
       - name: Install dependencies
         run: |
+          cd apps/infra
           bun install
-          cd apps/infra && pnpm install
 
       - name: Pulumi Preview
-        uses: pulumi/actions@v5
+        uses: pulumi/actions@v6
         with:
           command: preview
           stack-name: compai/placeholder-dev
