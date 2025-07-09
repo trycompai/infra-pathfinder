@@ -10,8 +10,10 @@
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:migrate": "tsx scripts/run-migrations.ts",
-    "db:migrate:drizzle": "drizzle-kit migrate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:migrate:runtime": "tsx scripts/run-migrations.ts",
+    "db:check": "drizzle-kit check",
+    "db:drop": "drizzle-kit drop",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
