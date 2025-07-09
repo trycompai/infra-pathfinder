@@ -112,7 +112,7 @@ export async function GET() {
 
 // POST /api/todos - Create a new todo
 export async function POST(request: Request) {
-  const debugInfo: any = {
+  const debugInfo: DebugInfo = {
     timestamp: new Date().toISOString(),
     steps: [],
   };
@@ -170,9 +170,9 @@ export async function POST(request: Request) {
       message: error instanceof Error ? error.message : String(error),
       name: error instanceof Error ? error.name : "Unknown",
       stack: error instanceof Error ? error.stack : undefined,
-      code: (error as any)?.code,
-      detail: (error as any)?.detail,
-      hint: (error as any)?.hint,
+      code: (error as { code?: string })?.code,
+      detail: (error as { detail?: string })?.detail,
+      hint: (error as { hint?: string })?.hint,
     };
 
     debugInfo.error = errorInfo;
