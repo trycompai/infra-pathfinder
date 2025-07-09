@@ -636,16 +636,31 @@ const betterStackECSSubscriptionFilter =
 // 2. RDS PostgreSQL logs
 const rdsLogGroupNameOutput = pulumi.interpolate`/aws/rds/instance/${db.id}/postgresql`;
 
+// Create the RDS log group explicitly
+const rdsLogGroup = new aws.cloudwatch.LogGroup(
+  "pathfinder-rds-log-group",
+  {
+    name: rdsLogGroupNameOutput,
+    retentionInDays: 7, // Keep logs for 7 days
+    tags: {
+      ...commonTags,
+      Name: "pathfinder-rds-log-group",
+      Type: "logging",
+    },
+  },
+  { dependsOn: [db] } // Ensure RDS is created first
+);
+
 const betterStackRDSSubscriptionFilter =
   new aws.cloudwatch.LogSubscriptionFilter(
     "pathfinder-better-stack-rds-subscription-filter",
     {
-      logGroup: rdsLogGroupNameOutput,
+      logGroup: rdsLogGroup.name,
       filterPattern: "", // Forward all logs
       destinationArn: betterStackLambda.arn,
       name: "logtail-aws-lambda-rds-filter",
     },
-    { dependsOn: [db] } // Ensure RDS is created first
+    { dependsOn: [rdsLogGroup] } // Ensure log group is created first
   );
 
 // Grant CloudWatch Logs permission to invoke the Lambda function from ECS
@@ -692,4 +707,4 @@ export const dbUsername = db.username;
 export const betterStackLambdaArn = betterStackLambda.arn;
 export const betterStackLambdaName = betterStackLambda.name;
 export const logGroupName = logGroup.name;
-export const rdsLogGroupName = rdsLogGroupNameOutput;
+export const rdsLogGroupName = rdsLogGroup.name;
