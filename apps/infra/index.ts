@@ -1,6 +1,7 @@
 import * as aws from "@pulumi/aws";
 import * as awsx from "@pulumi/awsx";
 import * as pulumi from "@pulumi/pulumi";
+import * as command from "@pulumi/command";
 import * as random from "@pulumi/random";
 
 // ==========================================
@@ -589,6 +590,16 @@ new aws.iam.RolePolicyAttachment(
   }
 );
 
+
+// Automatically install Lambda dependencies during deployment
+const installLambdaDeps = new command.local.Command("install-lambda-deps", {
+  create: "npm install --production",
+  dir: "../../logtail-aws-lambda",
+  environment: {
+    NODE_ENV: "production",
+  },
+});
+
 // Create a deployment package for the Lambda function
 const betterStackLambdaPackage = new pulumi.asset.FileArchive(
   "../../logtail-aws-lambda"
@@ -617,7 +628,8 @@ const betterStackLambda = new aws.lambda.Function(
       Name: "pathfinder-better-stack-lambda",
       Type: "log-forwarder",
     },
-  }
+  },
+  { dependsOn: [installLambdaDeps] }
 );
 
 // CloudWatch subscription filters to forward ALL logs to Better Stack
