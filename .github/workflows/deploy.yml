@@ -104,7 +104,7 @@ jobs:
             --task-definition $TASK_DEF_ARN \
             --launch-type FARGATE \
             --network-configuration "awsvpcConfiguration={subnets=[$(aws ec2 describe-subnets --filters "Name=tag:Name,Values=*pathfinder-vpc-private*" --query 'Subnets[*].SubnetId' --output text | tr '\t' ',')],securityGroups=[$(aws ec2 describe-security-groups --filters "Name=tag:Name,Values=*pathfinder-service-sg*" --query 'SecurityGroups[0].GroupId' --output text)],assignPublicIp=ENABLED}" \
-            --overrides '{"containerOverrides":[{"name":"pathfinder-app","command":["bun","run","debug:env"]}]}' \
+            --overrides '{"containerOverrides":[{"name":"pathfinder-app","command":["bun","run","db:migrate"]}]}' \
             --query 'tasks[0].taskArn' \
             --output text)
 

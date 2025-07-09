@@ -20,21 +20,23 @@ export default function Home() {
   let databaseUrl = "";
   let debugInfo = "";
 
+  // Test different ways to access DATABASE_URL
+  const rawProcessEnv = process.env.DATABASE_URL;
+  let validatedEnv = "";
+  let validatedError = "";
+
   try {
-    databaseUrl = env.DATABASE_URL;
+    validatedEnv = env.DATABASE_URL;
     debugInfo = `✅ env.DATABASE_URL accessed successfully (length: ${
-      databaseUrl?.length || 0
+      validatedEnv?.length || 0
     })`;
   } catch (error) {
+    validatedError = String(error);
     debugInfo = `❌ env.DATABASE_URL failed: ${error}`;
-    // Fallback to raw env
-    if (process.env.DATABASE_URL) {
-      databaseUrl = process.env.DATABASE_URL;
-      debugInfo += ` | ✅ process.env.DATABASE_URL fallback worked (length: ${databaseUrl.length})`;
-    } else {
-      debugInfo += " | ❌ process.env.DATABASE_URL also empty";
-    }
   }
+
+  // Use validated env if available, otherwise fallback
+  databaseUrl = validatedEnv || rawProcessEnv || "";
 
   const redactedUrl = redactDatabaseUrl(databaseUrl);
 
@@ -49,13 +51,20 @@ export default function Home() {
           background: "yellow",
           padding: "5px",
           fontSize: "12px",
-          maxWidth: "400px",
+          maxWidth: "500px",
           zIndex: 1000,
         }}
       >
         <div>DEBUG: {debugInfo}</div>
-        <div>Raw URL length: {databaseUrl?.length || 0}</div>
+        <div>Validated env length: {validatedEnv?.length || 0}</div>
+        <div>Raw process.env length: {rawProcessEnv?.length || 0}</div>
+        <div>Final URL length: {databaseUrl?.length || 0}</div>
         <div>Redacted result: {redactedUrl}</div>
+        {validatedError && <div>Validation error: {validatedError}</div>}
+        <div>NODE_ENV: {process.env.NODE_ENV}</div>
+        <div>
+          Context: {typeof window === "undefined" ? "server" : "client"}
+        </div>
       </div>
     </div>
   );
