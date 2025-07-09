@@ -316,17 +316,14 @@ const repo = new awsx.ecr.Repository("pathfinder-repo", {
   },
 });
 
-// This builds AND pushes your Docker image to ECR automatically:
-// 1. Builds Docker image from ../web/Dockerfile on YOUR machine
-// 2. Authenticates to ECR using your AWS credentials
-// 3. Tags the image with the ECR repository URL
-// 4. Pushes the image to ECR
-// This happens during `pulumi up` - no separate docker push needed!
-const image = new awsx.ecr.Image("pathfinder-image", {
-  repositoryUrl: repo.url,
-  context: "../web",
-  platform: "linux/amd64", // Required for AWS Fargate
-});
+// Get the image URI - either from environment variable (CI/CD) or build locally
+const imageUri =
+  process.env.DOCKER_IMAGE_URI ||
+  new awsx.ecr.Image("pathfinder-image", {
+    repositoryUrl: repo.url,
+    context: "../web",
+    platform: "linux/amd64", // Required for AWS Fargate
+  }).imageUri;
 
 // Fargate Service
 const service = new awsx.ecs.FargateService("pathfinder-service", {
@@ -343,7 +340,7 @@ const service = new awsx.ecs.FargateService("pathfinder-service", {
     },
     container: {
       name: "pathfinder-app",
-      image: image.imageUri,
+      image: imageUri,
       cpu: 1024, // 1 vCPU
       memory: 2048, // 2GB
       essential: true,

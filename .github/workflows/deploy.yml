@@ -21,14 +21,6 @@ jobs:
         with:
           bun-version: 1.2.8
 
-      - name: Setup Node.js (for Pulumi)
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Install pnpm
-        run: npm install -g pnpm
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -36,15 +28,92 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Install dependencies
-        run: |
-          bun install
-          cd apps/infra && pnpm install
+      # Check what changed
+      - name: Check changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v44
+        with:
+          files_yaml: |
+            infra:
+              - apps/infra/**
+            web:
+              - apps/web/**
 
-      - name: Deploy with Pulumi
+      # Login to ECR (needed for both paths)
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Path 1: Infrastructure changes - let Pulumi handle everything
+      - name: Deploy infrastructure with Pulumi
+        if: steps.changed-files.outputs.infra_any_changed == 'true'
         run: |
           cd apps/infra
+          bun install
           pulumi stack select compai/placeholder-dev --create
           pulumi up --yes
+
+      # Path 2: Code-only changes - build image and update ECS directly
+      - name: Build and push Docker image
+        if: steps.changed-files.outputs.infra_any_changed != 'true' && steps.changed-files.outputs.web_any_changed == 'true'
+        working-directory: ./apps/web
         env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: pathfinder-repo
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      # Run migrations using ECS task
+      - name: Run database migrations
+        run: |
+          echo "🚀 Running database migrations..."
+
+          # Run the migration task
+          TASK_ARN=$(aws ecs run-task \
+            --cluster pathfinder-cluster \
+            --task-definition pathfinder-service \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[$(aws ec2 describe-subnets --filters "Name=tag:Name,Values=*pathfinder-vpc-private*" --query 'Subnets[*].SubnetId' --output text | tr '\t' ',')],securityGroups=[$(aws ec2 describe-security-groups --filters "Name=tag:Name,Values=pathfinder-service-sg" --query 'SecurityGroups[0].GroupId' --output text)],assignPublicIp=ENABLED}" \
+            --overrides '{"containerOverrides":[{"name":"pathfinder-app","command":["bun","run","db:migrate"]}]}' \
+            --query 'tasks[0].taskArn' \
+            --output text)
+
+          echo "Migration task started: $TASK_ARN"
+
+          # Wait for migration to complete
+          aws ecs wait tasks-stopped --cluster pathfinder-cluster --tasks $TASK_ARN
+
+          # Check if migration succeeded
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster pathfinder-cluster \
+            --tasks $TASK_ARN \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "❌ Migration failed with exit code: $EXIT_CODE"
+            exit 1
+          fi
+
+          echo "✅ Migrations completed successfully!"
+
+      # Update ECS service (only if we built a new image)
+      - name: Update ECS service
+        if: steps.changed-files.outputs.infra_any_changed != 'true' && steps.changed-files.outputs.web_any_changed == 'true'
+        run: |
+          aws ecs update-service \
+            --cluster pathfinder-cluster \
+            --service pathfinder-service \
+            --force-new-deployment
+
+          aws ecs wait services-stable \
+            --cluster pathfinder-cluster \
+            --services pathfinder-service
+
+      - name: Deployment complete
+        run: |
+          echo "✅ Deployment completed successfully!"
+          echo "🎯 Deployment type: ${{ steps.changed-files.outputs.infra_any_changed == 'true' && 'Infrastructure + App' || 'App Only' }}"
