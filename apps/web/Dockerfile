@@ -39,7 +39,7 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/src/db ./src/db
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/drizzle.config.js ./drizzle.config.js
+COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
 COPY --from=builder /app/node_modules ./node_modules
 
 EXPOSE 3000

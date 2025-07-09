@@ -587,26 +587,93 @@ const betterStackLambda = new aws.lambda.Function(
   }
 );
 
-// CloudWatch subscription filter to forward logs to Better Stack
-const betterStackSubscriptionFilter = new aws.cloudwatch.LogSubscriptionFilter(
-  "pathfinder-better-stack-subscription-filter",
+// CloudWatch subscription filters to forward ALL logs to Better Stack
+// 1. ECS Application logs
+const betterStackECSSubscriptionFilter =
+  new aws.cloudwatch.LogSubscriptionFilter(
+    "pathfinder-better-stack-ecs-subscription-filter",
+    {
+      logGroup: logGroup.name,
+      filterPattern: "", // Forward all logs
+      destinationArn: betterStackLambda.arn,
+      name: "logtail-aws-lambda-ecs-filter",
+    }
+  );
+
+// 2. RDS PostgreSQL logs
+const betterStackRDSSubscriptionFilter =
+  new aws.cloudwatch.LogSubscriptionFilter(
+    "pathfinder-better-stack-rds-subscription-filter",
+    {
+      logGroup: pulumi.interpolate`/aws/rds/instance/${db.id}/postgresql`,
+      filterPattern: "", // Forward all logs
+      destinationArn: betterStackLambda.arn,
+      name: "logtail-aws-lambda-rds-filter",
+    }
+  );
+
+// 3. Better Stack Lambda function logs (for debugging the forwarder itself)
+const betterStackLambdaLogGroup = new aws.cloudwatch.LogGroup(
+  "pathfinder-better-stack-lambda-logs",
   {
-    logGroup: logGroup.name,
-    filterPattern: "", // Forward all logs
-    destinationArn: betterStackLambda.arn,
-    name: "logtail-aws-lambda-filter",
+    name: pulumi.interpolate`/aws/lambda/${betterStackLambda.name}`,
+    retentionInDays: 7,
+    tags: {
+      ...commonTags,
+      Name: "pathfinder-better-stack-lambda-logs",
+      Type: "lambda-logs",
+    },
   }
 );
 
-// Grant CloudWatch Logs permission to invoke the Lambda function
-const betterStackLambdaPermission = new aws.lambda.Permission(
-  "pathfinder-better-stack-lambda-permission",
+const betterStackLambdaSubscriptionFilter =
+  new aws.cloudwatch.LogSubscriptionFilter(
+    "pathfinder-better-stack-lambda-subscription-filter",
+    {
+      logGroup: betterStackLambdaLogGroup.name,
+      filterPattern: "", // Forward all logs
+      destinationArn: betterStackLambda.arn,
+      name: "logtail-aws-lambda-self-filter",
+    }
+  );
+
+// Grant CloudWatch Logs permission to invoke the Lambda function from multiple sources
+const betterStackLambdaPermissionECS = new aws.lambda.Permission(
+  "pathfinder-better-stack-lambda-permission-ecs",
   {
-    statementId: "AllowExecutionFromCloudWatchLogs",
+    statementId: "AllowExecutionFromCloudWatchLogsECS",
     action: "lambda:InvokeFunction",
     function: betterStackLambda.name,
     principal: "logs.amazonaws.com",
     sourceArn: pulumi.interpolate`${logGroup.arn}:*`,
+  }
+);
+
+const callerIdentity = pulumi.output(aws.getCallerIdentity({}));
+const betterStackLambdaPermissionRDS = new aws.lambda.Permission(
+  "pathfinder-better-stack-lambda-permission-rds",
+  {
+    statementId: "AllowExecutionFromCloudWatchLogsRDS",
+    action: "lambda:InvokeFunction",
+    function: betterStackLambda.name,
+    principal: "logs.amazonaws.com",
+    sourceArn: pulumi
+      .all([aws.config.region, callerIdentity.accountId, db.id])
+      .apply(
+        ([region, accountId, dbId]) =>
+          `arn:aws:logs:${region}:${accountId}:log-group:/aws/rds/instance/${dbId}/postgresql:*`
+      ),
+  }
+);
+
+const betterStackLambdaPermissionSelf = new aws.lambda.Permission(
+  "pathfinder-better-stack-lambda-permission-self",
+  {
+    statementId: "AllowExecutionFromCloudWatchLogsLambda",
+    action: "lambda:InvokeFunction",
+    function: betterStackLambda.name,
+    principal: "logs.amazonaws.com",
+    sourceArn: pulumi.interpolate`${betterStackLambdaLogGroup.arn}:*`,
   }
 );
 
