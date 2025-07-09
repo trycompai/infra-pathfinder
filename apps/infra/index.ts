@@ -126,10 +126,10 @@ const dbSubnetGroup = new aws.rds.SubnetGroup("pathfinder-db-subnet-group", {
 });
 
 // Generate a secure random password for the database
-const dbPassword = new random.RandomPassword("pathfinder-db-password", {
+const dbPassword = new random.RandomPassword("pathfinder-db-password-v2", {
   length: 32,
   special: true,
-  overrideSpecial: "!@#$%&*()-_=+[]{}<>:?", // Avoid problematic characters in connection strings
+  overrideSpecial: "!#$%&*()-_=+[]{}<>:?", // RDS doesn't allow: / @ " space
 });
 
 // RDS PostgreSQL Instance
