@@ -355,6 +355,10 @@ const service = new awsx.ecs.FargateService("pathfinder-service", {
           name: "DATABASE_URL",
           value: pulumi.interpolate`postgresql://${db.username}:${db.password}@${db.endpoint}/${db.dbName}`,
         },
+        {
+          name: "ENABLE_DEBUG_ENDPOINTS",
+          value: "true", // Temporary: for debugging environment variables
+        },
       ],
       portMappings: [
         {
