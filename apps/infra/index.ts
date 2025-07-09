@@ -484,6 +484,133 @@ const albResponseTimeAlarm = new aws.cloudwatch.MetricAlarm(
 );
 
 // ==========================================
+// BETTER STACK LOG FORWARDING
+// Lambda function to forward CloudWatch logs to Better Stack
+// ==========================================
+
+// IAM role for the Better Stack Lambda function
+const betterStackLambdaRole = new aws.iam.Role(
+  "pathfinder-better-stack-lambda-role",
+  {
+    assumeRolePolicy: JSON.stringify({
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Action: "sts:AssumeRole",
+          Effect: "Allow",
+          Principal: {
+            Service: "lambda.amazonaws.com",
+          },
+        },
+      ],
+    }),
+    tags: {
+      ...commonTags,
+      Name: "pathfinder-better-stack-lambda-role",
+      Type: "iam-role",
+    },
+  }
+);
+
+// Attach basic Lambda execution policy
+new aws.iam.RolePolicyAttachment(
+  "pathfinder-better-stack-lambda-basic-execution",
+  {
+    role: betterStackLambdaRole.name,
+    policyArn:
+      "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+  }
+);
+
+// Custom policy for reading from CloudWatch Logs
+const betterStackLambdaPolicy = new aws.iam.Policy(
+  "pathfinder-better-stack-lambda-policy",
+  {
+    policy: JSON.stringify({
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Action: [
+            "logs:CreateLogGroup",
+            "logs:CreateLogStream",
+            "logs:PutLogEvents",
+          ],
+          Resource: "arn:aws:logs:*:*:*",
+        },
+      ],
+    }),
+    tags: {
+      ...commonTags,
+      Name: "pathfinder-better-stack-lambda-policy",
+      Type: "iam-policy",
+    },
+  }
+);
+
+new aws.iam.RolePolicyAttachment(
+  "pathfinder-better-stack-lambda-policy-attachment",
+  {
+    role: betterStackLambdaRole.name,
+    policyArn: betterStackLambdaPolicy.arn,
+  }
+);
+
+// Create a deployment package for the Lambda function
+const betterStackLambdaPackage = new pulumi.asset.FileArchive(
+  "../../logtail-aws-lambda"
+);
+
+// Better Stack Lambda function
+const betterStackLambda = new aws.lambda.Function(
+  "pathfinder-better-stack-lambda",
+  {
+    name: "logtail-aws-lambda",
+    role: betterStackLambdaRole.arn,
+    handler: "index.handler",
+    runtime: "nodejs22.x",
+    architectures: ["x86_64"],
+    code: betterStackLambdaPackage,
+    timeout: 30,
+    environment: {
+      variables: {
+        BETTER_STACK_ENTRYPOINT:
+          "https://s1374763.eu-nbg-2.betterstackdata.com",
+        BETTER_STACK_SOURCE_TOKEN: "1qUb5qfDVR8L5dvCUS872M4n",
+      },
+    },
+    tags: {
+      ...commonTags,
+      Name: "pathfinder-better-stack-lambda",
+      Type: "log-forwarder",
+    },
+  }
+);
+
+// CloudWatch subscription filter to forward logs to Better Stack
+const betterStackSubscriptionFilter = new aws.cloudwatch.LogSubscriptionFilter(
+  "pathfinder-better-stack-subscription-filter",
+  {
+    logGroup: logGroup.name,
+    filterPattern: "", // Forward all logs
+    destinationArn: betterStackLambda.arn,
+    name: "logtail-aws-lambda-filter",
+  }
+);
+
+// Grant CloudWatch Logs permission to invoke the Lambda function
+const betterStackLambdaPermission = new aws.lambda.Permission(
+  "pathfinder-better-stack-lambda-permission",
+  {
+    statementId: "AllowExecutionFromCloudWatchLogs",
+    action: "lambda:InvokeFunction",
+    function: betterStackLambda.name,
+    principal: "logs.amazonaws.com",
+    sourceArn: pulumi.interpolate`${logGroup.arn}:*`,
+  }
+);
+
+// ==========================================
 // STACK OUTPUTS
 // Values accessible after deployment
 // ==========================================
@@ -494,3 +621,8 @@ export const dbConnectionString = pulumi.interpolate`postgresql://${db.username}
 // Export password as a secret - only visible via CLI with --show-secrets flag
 export const dbPasswordSecret = pulumi.secret(dbPassword.result);
 export const dbUsername = db.username;
+
+// Better Stack logging information
+export const betterStackLambdaArn = betterStackLambda.arn;
+export const betterStackLambdaName = betterStackLambda.name;
+export const logGroupName = logGroup.name;
