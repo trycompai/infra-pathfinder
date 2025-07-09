@@ -12,10 +12,12 @@
     "build": "turbo build",
     "lint": "turbo lint",
     "type-check": "turbo type-check",
-    "infra:install": "cd apps/infra && pnpm install",
-    "infra:preview": "cd apps/infra && pulumi preview",
-    "infra:up": "cd apps/infra && pulumi up",
-    "infra:destroy": "cd apps/infra && pulumi destroy"
+    "infra:install": "cd apps/infra && bun install",
+    "infra:preview": "cd apps/infra && bun install && pulumi preview",
+    "infra:up": "cd apps/infra && bun install && pulumi up",
+    "infra:deploy": "cd apps/infra && bun install && pulumi up",
+    "infra:destroy": "cd apps/infra && pulumi destroy",
+    "deploy": "cd apps/infra && bun install && pulumi up"
   },
   "devDependencies": {
     "turbo": "^2.5.4"

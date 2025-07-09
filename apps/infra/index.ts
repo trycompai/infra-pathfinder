@@ -316,14 +316,12 @@ const repo = new awsx.ecr.Repository("pathfinder-repo", {
   },
 });
 
-// Get the image URI - either from environment variable (CI/CD) or build locally
-const imageUri =
-  process.env.DOCKER_IMAGE_URI ||
-  new awsx.ecr.Image("pathfinder-image", {
-    repositoryUrl: repo.url,
-    context: "../web",
-    platform: "linux/amd64", // Required for AWS Fargate
-  }).imageUri;
+// Always build Docker image locally and push to ECR
+const imageUri = new awsx.ecr.Image("pathfinder-image", {
+  repositoryUrl: repo.url,
+  context: "../web",
+  platform: "linux/amd64", // Required for AWS Fargate
+}).imageUri;
 
 // Fargate Service
 const service = new awsx.ecs.FargateService("pathfinder-service", {

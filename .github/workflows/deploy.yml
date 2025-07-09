@@ -28,45 +28,20 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # Check what changed - Using dorny/paths-filter instead of compromised tj-actions
-      - name: Check changed files
-        id: changed-files
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            infra:
-              - 'apps/infra/**'
-            web:
-              - 'apps/web/**'
-
-      # Login to ECR (needed for both paths)
+      # Login to ECR (needed for Docker push)
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      # Path 1: Infrastructure changes - let Pulumi handle everything
-      - name: Deploy infrastructure with Pulumi
-        if: steps.changed-files.outputs.infra == 'true'
+      # Deploy everything through Pulumi (handles Docker building and infrastructure)
+      - name: Deploy with Pulumi
         run: |
           cd apps/infra
           bun install
           pulumi stack select compai/placeholder-dev --create
           pulumi up --yes
 
-      # Path 2: Code-only changes - build image and update ECS directly
-      - name: Build and push Docker image
-        if: steps.changed-files.outputs.infra != 'true' && steps.changed-files.outputs.web == 'true'
-        working-directory: ./apps/web
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: pathfinder-repo
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-
-      # Run migrations using ECS task
+      # Run migrations after deployment
       - name: Run database migrations
         run: |
           echo "🚀 Running database migrations..."
@@ -100,20 +75,7 @@ jobs:
 
           echo "✅ Migrations completed successfully!"
 
-      # Update ECS service (only if we built a new image)
-      - name: Update ECS service
-        if: steps.changed-files.outputs.infra != 'true' && steps.changed-files.outputs.web == 'true'
-        run: |
-          aws ecs update-service \
-            --cluster pathfinder-cluster \
-            --service pathfinder-service \
-            --force-new-deployment
-
-          aws ecs wait services-stable \
-            --cluster pathfinder-cluster \
-            --services pathfinder-service
-
       - name: Deployment complete
         run: |
           echo "✅ Deployment completed successfully!"
-          echo "🎯 Deployment type: ${{ steps.changed-files.outputs.infra == 'true' && 'Infrastructure + App' || 'App Only' }}"
+          echo "🎯 Pulumi handled Docker building and infrastructure deployment"
