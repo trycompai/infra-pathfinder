@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Disable AWS CLI paging
+export AWS_PAGER=""
+
 echo "🔍 Checking recent migration logs..."
 
 # Get the cluster and service names
@@ -18,7 +21,7 @@ echo "----------------------------------------"
 aws ecs list-tasks --cluster $CLUSTER_NAME --desired-status STOPPED --max-items 10 --query 'taskArns[]' --output text | while read task_arn; do
   if [ -n "$task_arn" ]; then
     TASK_ID=$(echo $task_arn | awk -F'/' '{print $NF}')
-    LOG_STREAM_NAME="pathfinder/$TASK_ID"
+    LOG_STREAM_NAME="pathfinder/pathfinder-app/$TASK_ID"
     
     # Check if this task has migration-related logs
     if aws logs get-log-events \

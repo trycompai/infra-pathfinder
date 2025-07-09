@@ -13,6 +13,7 @@ concurrency:
 env:
   AWS_REGION: us-east-1
   PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+  AWS_PAGER: ""
 
 jobs:
   deploy:
@@ -125,7 +126,7 @@ jobs:
 
           # Get the log stream name for this specific task
           TASK_ID=$(echo $TASK_ARN | awk -F'/' '{print $NF}')
-          LOG_STREAM_NAME="pathfinder/$TASK_ID"
+          LOG_STREAM_NAME="pathfinder/pathfinder-app/$TASK_ID"
 
           echo "📋 Getting logs from CloudWatch:"
           echo "   Log group: $LOG_GROUP_NAME"
