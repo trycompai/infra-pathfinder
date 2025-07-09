@@ -601,20 +601,21 @@ const betterStackECSSubscriptionFilter =
   );
 
 // 2. RDS PostgreSQL logs
+const rdsLogGroupNameOutput = pulumi.interpolate`/aws/rds/instance/${db.id}/postgresql`;
+
 const betterStackRDSSubscriptionFilter =
   new aws.cloudwatch.LogSubscriptionFilter(
     "pathfinder-better-stack-rds-subscription-filter",
     {
-      logGroup: pulumi.interpolate`/aws/rds/instance/${db.id}/postgresql`,
+      logGroup: rdsLogGroupNameOutput,
       filterPattern: "", // Forward all logs
       destinationArn: betterStackLambda.arn,
       name: "logtail-aws-lambda-rds-filter",
-    }
+    },
+    { dependsOn: [db] } // Ensure RDS is created first
   );
 
-// Note: We don't forward Lambda logs to itself to avoid circular dependency
-
-// Grant CloudWatch Logs permission to invoke the Lambda function from multiple sources
+// Grant CloudWatch Logs permission to invoke the Lambda function from ECS
 const betterStackLambdaPermissionECS = new aws.lambda.Permission(
   "pathfinder-better-stack-lambda-permission-ecs",
   {
@@ -626,7 +627,7 @@ const betterStackLambdaPermissionECS = new aws.lambda.Permission(
   }
 );
 
-const callerIdentity = pulumi.output(aws.getCallerIdentity({}));
+// Grant CloudWatch Logs permission to invoke the Lambda function from RDS
 const betterStackLambdaPermissionRDS = new aws.lambda.Permission(
   "pathfinder-better-stack-lambda-permission-rds",
   {
@@ -634,16 +635,13 @@ const betterStackLambdaPermissionRDS = new aws.lambda.Permission(
     action: "lambda:InvokeFunction",
     function: betterStackLambda.name,
     principal: "logs.amazonaws.com",
-    sourceArn: pulumi
-      .all([aws.config.region, callerIdentity.accountId, db.id])
-      .apply(
-        ([region, accountId, dbId]) =>
-          `arn:aws:logs:${region}:${accountId}:log-group:/aws/rds/instance/${dbId}/postgresql:*`
-      ),
+    sourceArn: pulumi.interpolate`arn:aws:logs:${aws.config.region}:${aws
+      .getCallerIdentity()
+      .then((id) => id.accountId)}:log-group:/aws/rds/instance/${
+      db.id
+    }/postgresql:*`,
   }
 );
-
-// Removed self-referencing Lambda permission to avoid circular dependency
 
 // ==========================================
 // STACK OUTPUTS
@@ -661,3 +659,4 @@ export const dbUsername = db.username;
 export const betterStackLambdaArn = betterStackLambda.arn;
 export const betterStackLambdaName = betterStackLambda.name;
 export const logGroupName = logGroup.name;
+export const rdsLogGroupName = rdsLogGroupNameOutput;
