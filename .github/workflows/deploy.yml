@@ -5,6 +5,11 @@ on:
     branches: [main]
   workflow_dispatch: # Allow manual trigger
 
+# Prevent multiple deployments from running simultaneously
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false # Don't cancel running deployments, just queue them
+
 env:
   AWS_REGION: us-east-1
   PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
@@ -31,9 +36,10 @@ jobs:
       # Login to ECR (needed for Docker push)
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+        uses:
+          aws-actions/amazon-ecr-login@v2
 
-      # Deploy everything through Pulumi (handles Docker building and infrastructure)
+          # Deploy everything through Pulumi (handles Docker building and infrastructure)
       - name: Deploy with Pulumi
         run: |
           cd apps/infra
@@ -95,6 +101,15 @@ jobs:
           fi
 
           echo "✅ Migrations completed successfully!"
+
+      # Cleanup on failure
+      - name: Cleanup on failure
+        if: failure()
+        run: |
+          echo "🧹 Cleaning up failed deployment..."
+          cd apps/infra
+          pulumi cancel --yes || true
+          echo "Cleanup completed"
 
       - name: Deployment complete
         run: |
