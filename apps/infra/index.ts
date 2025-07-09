@@ -612,20 +612,7 @@ const betterStackRDSSubscriptionFilter =
     }
   );
 
-// 3. Better Stack Lambda function logs (for debugging the forwarder itself)
-// Note: AWS Lambda automatically creates this log group, so we just reference it
-const betterStackLambdaLogGroupName = pulumi.interpolate`/aws/lambda/${betterStackLambda.name}`;
-
-const betterStackLambdaSubscriptionFilter =
-  new aws.cloudwatch.LogSubscriptionFilter(
-    "pathfinder-better-stack-lambda-subscription-filter",
-    {
-      logGroup: betterStackLambdaLogGroupName,
-      filterPattern: "", // Forward all logs
-      destinationArn: betterStackLambda.arn,
-      name: "logtail-aws-lambda-self-filter",
-    }
-  );
+// Note: We don't forward Lambda logs to itself to avoid circular dependency
 
 // Grant CloudWatch Logs permission to invoke the Lambda function from multiple sources
 const betterStackLambdaPermissionECS = new aws.lambda.Permission(
@@ -656,21 +643,7 @@ const betterStackLambdaPermissionRDS = new aws.lambda.Permission(
   }
 );
 
-const betterStackLambdaPermissionSelf = new aws.lambda.Permission(
-  "pathfinder-better-stack-lambda-permission-self",
-  {
-    statementId: "AllowExecutionFromCloudWatchLogsLambda",
-    action: "lambda:InvokeFunction",
-    function: betterStackLambda.name,
-    principal: "logs.amazonaws.com",
-    sourceArn: pulumi
-      .all([callerIdentity.accountId, betterStackLambdaLogGroupName])
-      .apply(
-        ([accountId, logGroupName]) =>
-          `arn:aws:logs:${aws.config.region}:${accountId}:log-group:${logGroupName}:*`
-      ),
-  }
-);
+// Removed self-referencing Lambda permission to avoid circular dependency
 
 // ==========================================
 // STACK OUTPUTS
