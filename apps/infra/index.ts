@@ -613,24 +613,14 @@ const betterStackRDSSubscriptionFilter =
   );
 
 // 3. Better Stack Lambda function logs (for debugging the forwarder itself)
-const betterStackLambdaLogGroup = new aws.cloudwatch.LogGroup(
-  "pathfinder-better-stack-lambda-logs",
-  {
-    name: pulumi.interpolate`/aws/lambda/${betterStackLambda.name}`,
-    retentionInDays: 7,
-    tags: {
-      ...commonTags,
-      Name: "pathfinder-better-stack-lambda-logs",
-      Type: "lambda-logs",
-    },
-  }
-);
+// Note: AWS Lambda automatically creates this log group, so we just reference it
+const betterStackLambdaLogGroupName = pulumi.interpolate`/aws/lambda/${betterStackLambda.name}`;
 
 const betterStackLambdaSubscriptionFilter =
   new aws.cloudwatch.LogSubscriptionFilter(
     "pathfinder-better-stack-lambda-subscription-filter",
     {
-      logGroup: betterStackLambdaLogGroup.name,
+      logGroup: betterStackLambdaLogGroupName,
       filterPattern: "", // Forward all logs
       destinationArn: betterStackLambda.arn,
       name: "logtail-aws-lambda-self-filter",
@@ -673,7 +663,12 @@ const betterStackLambdaPermissionSelf = new aws.lambda.Permission(
     action: "lambda:InvokeFunction",
     function: betterStackLambda.name,
     principal: "logs.amazonaws.com",
-    sourceArn: pulumi.interpolate`${betterStackLambdaLogGroup.arn}:*`,
+    sourceArn: pulumi
+      .all([callerIdentity.accountId, betterStackLambdaLogGroupName])
+      .apply(
+        ([accountId, logGroupName]) =>
+          `arn:aws:logs:${aws.config.region}:${accountId}:log-group:${logGroupName}:*`
+      ),
   }
 );
 
