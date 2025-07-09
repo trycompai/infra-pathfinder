@@ -16,6 +16,7 @@ env:
 
 jobs:
   deploy:
+    name: Deploy Infrastructure
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -46,7 +47,32 @@ jobs:
           pulumi stack select compai/placeholder-dev --create
           pulumi up --yes
 
-      # Run migrations after deployment
+      # Cleanup on Pulumi failure only
+      - name: Cleanup failed Pulumi deployment
+        if: failure()
+        run: |
+          echo "🧹 Cleaning up failed Pulumi deployment..."
+          cd apps/infra
+          pulumi cancel --yes || true
+          echo "Pulumi cleanup completed"
+
+      - name: Infrastructure deployment complete
+        run: |
+          echo "✅ Infrastructure deployment completed successfully!"
+          echo "🎯 Pulumi handled Docker building and infrastructure deployment"
+
+  migrate:
+    name: Run Database Migrations
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
       - name: Run database migrations
         run: |
           echo "🚀 Running database migrations..."
@@ -101,16 +127,24 @@ jobs:
 
           echo "✅ Migrations completed successfully!"
 
-      # Cleanup on failure
-      - name: Cleanup on failure
-        if: failure()
+      - name: Migration complete
         run: |
-          echo "🧹 Cleaning up failed deployment..."
-          cd apps/infra
-          pulumi cancel --yes || true
-          echo "Cleanup completed"
+          echo "✅ Database migrations completed successfully!"
 
-      - name: Deployment complete
+  complete:
+    name: Deployment Complete
+    runs-on: ubuntu-latest
+    needs: [deploy, migrate]
+    if: always()
+    steps:
+      - name: Deployment status
         run: |
-          echo "✅ Deployment completed successfully!"
-          echo "🎯 Pulumi handled Docker building and infrastructure deployment"
+          if [ "${{ needs.deploy.result }}" = "success" ] && [ "${{ needs.migrate.result }}" = "success" ]; then
+            echo "🎉 Full deployment completed successfully!"
+          elif [ "${{ needs.deploy.result }}" = "success" ] && [ "${{ needs.migrate.result }}" = "failure" ]; then
+            echo "⚠️  Infrastructure deployed but migrations failed"
+            echo "🔧 You can retry migrations or fix them manually"
+          else
+            echo "❌ Deployment failed"
+            exit 1
+          fi
