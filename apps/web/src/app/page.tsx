@@ -1,10 +1,21 @@
+import { db, todos } from "@/db";
 import { env } from "@/env";
+import { desc } from "drizzle-orm";
 import TodoApp from "./components/TodoApp";
 
-export default function Home() {
+export default async function Home() {
+  // Fetch todos server-side
+  const initialTodos = await db
+    .select()
+    .from(todos)
+    .orderBy(desc(todos.createdAt));
+
   return (
     <div>
-      <TodoApp databaseUrl={env.DATABASE_URL} />
+      <TodoApp 
+        databaseUrl={env.DATABASE_URL} 
+        initialTodos={initialTodos}
+      />
       <div
         style={{
           position: "fixed",

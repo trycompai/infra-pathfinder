@@ -1,39 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
-type Todo = {
-  id: number;
-  title: string;
-  completed: boolean;
-  createdAt: string;
-  updatedAt: string;
-};
+import { todosApi } from "@/services/api";
+import type { Todo } from "@/types/api";
+import { useState } from "react";
 
 type TodoAppProps = {
   databaseUrl: string;
+  initialTodos: Todo[];
 };
 
-export default function TodoApp({ databaseUrl }: TodoAppProps) {
-  const [todos, setTodos] = useState<Todo[]>([]);
+export default function TodoApp({ databaseUrl, initialTodos }: TodoAppProps) {
+  const [todos, setTodos] = useState<Todo[]>(initialTodos);
   const [newTodo, setNewTodo] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch todos on mount
-  useEffect(() => {
-    fetchTodos();
-  }, []);
-
-  const fetchTodos = async () => {
+  // Refetch todos (mainly for after mutations if needed)
+  const refetchTodos = async () => {
     try {
-      const response = await fetch("/api/todos");
-      if (!response.ok) throw new Error("Failed to fetch todos");
-      const data = await response.json();
-      setTodos(data);
+      setLoading(true);
+      const updatedTodos = await todosApi.getTodos();
+      setTodos(updatedTodos);
       setError(null);
     } catch (err) {
-      setError("Failed to load todos. Is your database connected?");
+      setError(err instanceof Error ? err.message : "Failed to load todos");
       console.error(err);
     } finally {
       setLoading(false);
@@ -45,55 +35,36 @@ export default function TodoApp({ databaseUrl }: TodoAppProps) {
     if (!newTodo.trim()) return;
 
     try {
-      const response = await fetch("/api/todos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: newTodo }),
-      });
-
-      if (!response.ok) throw new Error("Failed to create todo");
-
-      const todo = await response.json();
-      setTodos([todo, ...todos]);
+      const newTodoItem = await todosApi.createTodo(newTodo.trim());
+      setTodos((prev) => [newTodoItem, ...prev]);
       setNewTodo("");
       setError(null);
     } catch (err) {
-      setError("Failed to create todo");
+      setError(err instanceof Error ? err.message : "Failed to add todo");
       console.error(err);
     }
   };
 
   const toggleTodo = async (id: number, completed: boolean) => {
     try {
-      const response = await fetch(`/api/todos/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ completed: !completed }),
-      });
-
-      if (!response.ok) throw new Error("Failed to update todo");
-
-      const updatedTodo = await response.json();
-      setTodos(todos.map((todo) => (todo.id === id ? updatedTodo : todo)));
+      const updatedTodo = await todosApi.updateTodo(id, { completed });
+      setTodos((prev) =>
+        prev.map((todo) => (todo.id === id ? updatedTodo : todo))
+      );
       setError(null);
     } catch (err) {
-      setError("Failed to update todo");
+      setError(err instanceof Error ? err.message : "Failed to update todo");
       console.error(err);
     }
   };
 
   const deleteTodo = async (id: number) => {
     try {
-      const response = await fetch(`/api/todos/${id}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) throw new Error("Failed to delete todo");
-
-      setTodos(todos.filter((todo) => todo.id !== id));
+      await todosApi.deleteTodo(id);
+      setTodos((prev) => prev.filter((todo) => todo.id !== id));
       setError(null);
     } catch (err) {
-      setError("Failed to delete todo");
+      setError(err instanceof Error ? err.message : "Failed to delete todo");
       console.error(err);
     }
   };
@@ -150,27 +121,32 @@ export default function TodoApp({ databaseUrl }: TodoAppProps) {
             {todos.map((todo) => (
               <li
                 key={todo.id}
-                className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 
+                         border border-gray-200 dark:border-gray-700 rounded-lg"
               >
                 <input
                   type="checkbox"
                   checked={todo.completed}
-                  onChange={() => toggleTodo(todo.id, todo.completed)}
-                  className="w-5 h-5 cursor-pointer"
+                  onChange={(e) => toggleTodo(todo.id, e.target.checked)}
+                  className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
                 />
                 <span
                   className={`flex-1 ${
                     todo.completed
-                      ? "line-through text-gray-500"
-                      : "text-gray-900 dark:text-gray-100"
+                      ? "line-through text-gray-500 dark:text-gray-400"
+                      : "text-black dark:text-white"
                   }`}
                 >
                   {todo.title}
                 </span>
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  {new Date(todo.createdAt).toLocaleDateString()}
+                </span>
                 <button
                   onClick={() => deleteTodo(todo.id)}
-                  className="px-3 py-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 
-                           rounded transition-colors"
+                  className="px-3 py-1 text-red-600 hover:text-red-800 
+                           dark:text-red-400 dark:hover:text-red-200
+                           transition-colors"
                 >
                   Delete
                 </button>
@@ -178,20 +154,19 @@ export default function TodoApp({ databaseUrl }: TodoAppProps) {
             ))}
           </ul>
         )}
-
-        {/* Database Info */}
-        <div className="mt-12 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
-          <h2 className="font-semibold mb-2">Database Info:</h2>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-            This app is using Drizzle ORM with PostgreSQL.
-            {todos.length > 0 &&
-              ` Currently storing ${todos.length} todo${
-                todos.length === 1 ? "" : "s"
-              }.`}
-          </p>
-          <p className="text-xs text-gray-500 dark:text-gray-500 font-mono break-all">
-            📊 Database URL: {databaseUrl}
-          </p>
+        
+        {/* Debug info */}
+        <div className="mt-8 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
+          <h3 className="font-semibold mb-2">Debug Info:</h3>
+          <p className="text-sm">Initial todos loaded: {initialTodos.length}</p>
+          <p className="text-sm">Current todos count: {todos.length}</p>
+          <button
+            onClick={refetchTodos}
+            className="mt-2 px-4 py-2 bg-blue-500 text-white rounded-lg 
+                     hover:bg-blue-600 transition-colors text-sm"
+          >
+            Refetch Todos
+          </button>
         </div>
       </main>
     </div>

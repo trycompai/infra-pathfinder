@@ -2,8 +2,8 @@ import { db, todos } from "@/db";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
-// PATCH /api/todos/[id] - Update a todo
-export async function PATCH(
+// PUT /api/todos/[id] - Update a todo
+export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -11,7 +11,13 @@ export async function PATCH(
     const { id: idParam } = await params;
     const id = parseInt(idParam);
     if (isNaN(id)) {
-      return NextResponse.json({ error: "Invalid todo ID" }, { status: 400 });
+      return NextResponse.json(
+        { 
+          success: false,
+          error: "Invalid todo ID" 
+        }, 
+        { status: 400 }
+      );
     }
 
     const body = await request.json();
@@ -38,14 +44,26 @@ export async function PATCH(
       .returning();
 
     if (!updatedTodo) {
-      return NextResponse.json({ error: "Todo not found" }, { status: 404 });
+      return NextResponse.json(
+        { 
+          success: false,
+          error: "Todo not found" 
+        }, 
+        { status: 404 }
+      );
     }
 
-    return NextResponse.json(updatedTodo);
+    return NextResponse.json({
+      success: true,
+      data: updatedTodo,
+    });
   } catch (error) {
     console.error("Failed to update todo:", error);
     return NextResponse.json(
-      { error: "Failed to update todo" },
+      { 
+        success: false,
+        error: "Failed to update todo" 
+      },
       { status: 500 }
     );
   }
@@ -60,7 +78,13 @@ export async function DELETE(
     const { id: idParam } = await params;
     const id = parseInt(idParam);
     if (isNaN(id)) {
-      return NextResponse.json({ error: "Invalid todo ID" }, { status: 400 });
+      return NextResponse.json(
+        { 
+          success: false,
+          error: "Invalid todo ID" 
+        }, 
+        { status: 400 }
+      );
     }
 
     const [deletedTodo] = await db
@@ -69,14 +93,26 @@ export async function DELETE(
       .returning();
 
     if (!deletedTodo) {
-      return NextResponse.json({ error: "Todo not found" }, { status: 404 });
+      return NextResponse.json(
+        { 
+          success: false,
+          error: "Todo not found" 
+        }, 
+        { status: 404 }
+      );
     }
 
-    return NextResponse.json({ message: "Todo deleted successfully" });
+    return NextResponse.json({ 
+      success: true,
+      message: "Todo deleted successfully" 
+    });
   } catch (error) {
     console.error("Failed to delete todo:", error);
     return NextResponse.json(
-      { error: "Failed to delete todo" },
+      { 
+        success: false,
+        error: "Failed to delete todo" 
+      },
       { status: 500 }
     );
   }
