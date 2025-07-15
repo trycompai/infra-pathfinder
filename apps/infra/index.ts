@@ -147,7 +147,10 @@ const db = new aws.rds.Instance("pathfinder-db", {
   password: dbPassword.result, // Use the generated secure password
   vpcSecurityGroupIds: [dbSecurityGroup.id],
   dbSubnetGroupName: dbSubnetGroup.name,
-
+  
+  // Use default parameter group (requires SSL - AWS best practice)
+  applyImmediately: true, // Apply parameter changes immediately (requires restart)
+  
   skipFinalSnapshot: true, // For dev - set to false in production
   deletionProtection: false, // For dev - set to true in production
   backupRetentionPeriod: 7, // Keep backups for 7 days
@@ -461,10 +464,10 @@ const service = new awsx.ecs.FargateService("pathfinder-service", {
             name: "PORT",
             value: "3000",
           },
-          {
-            name: "DATABASE_URL",
-            value: pulumi.interpolate`postgresql://${db.username}:${db.password}@${db.endpoint}/${db.dbName}`,
-          },
+                  {
+          name: "DATABASE_URL",
+          value: pulumi.interpolate`postgresql://${db.username}:${db.password}@${db.endpoint}/${db.dbName}`,
+        },
           {
             name: "ENABLE_DEBUG_ENDPOINTS",
             value: "true", // Temporary: for debugging environment variables

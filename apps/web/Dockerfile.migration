@@ -3,15 +3,27 @@ FROM oven/bun:1.2.18-alpine
 
 WORKDIR /app
 
-# Copy only what's needed for migrations
+# Copy package files first for better caching
 COPY package.json bun.lock* ./
-COPY src/db ./src/db
-COPY src/env.ts ./src/env.ts
-COPY scripts ./scripts
+
+# Install all dependencies (including dev deps like tsx if needed)
+RUN bun install --frozen-lockfile
+
+# Copy the entire src directory to avoid import path issues
+COPY src/ ./src/
+COPY scripts/ ./scripts/
 COPY drizzle.config.ts ./
 
-# Install only production dependencies
-RUN bun install --frozen-lockfile --production
+# Verify migration files exist and show structure
+RUN echo "=== Directory structure ===" && \
+    find . -type f -name "*.ts" -o -name "*.sql" | head -20 && \
+    echo "=== Migration files ===" && \
+    ls -la src/db/migrations/ && \
+    echo "=== Environment check ===" && \
+    printenv | grep -E "(DATABASE_URL|NODE_ENV)" || echo "No DB env vars yet"
 
-# Default command runs migrations
-CMD ["bun", "run", "scripts/run-migrations.ts"] 
+# Set environment for better error reporting
+ENV NODE_ENV=production
+
+# Default command runs migrations with verbose output
+CMD ["sh", "-c", "echo 'Starting migration container...' && bun run scripts/run-migrations.ts"] 
