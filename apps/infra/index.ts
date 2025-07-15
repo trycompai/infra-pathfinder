@@ -399,12 +399,12 @@ const codeBuildRole = new aws.iam.Role("pathfinder-codebuild-role", {
 
 // CodeBuild policy for ECR, VPC, and CloudWatch access
 const codeBuildPolicy = new aws.iam.Policy("pathfinder-codebuild-policy", {
-  policy: JSON.stringify({
-    Version: "2012-10-17",
-    Statement: [
+  policy: pulumi.interpolate`{
+    "Version": "2012-10-17",
+    "Statement": [
       {
-        Effect: "Allow",
-        Action: [
+        "Effect": "Allow",
+        "Action": [
           "ecr:BatchCheckLayerAvailability",
           "ecr:GetDownloadUrlForLayer",
           "ecr:BatchGetImage",
@@ -412,22 +412,22 @@ const codeBuildPolicy = new aws.iam.Policy("pathfinder-codebuild-policy", {
           "ecr:PutImage",
           "ecr:InitiateLayerUpload",
           "ecr:UploadLayerPart",
-          "ecr:CompleteLayerUpload",
+          "ecr:CompleteLayerUpload"
         ],
-        Resource: "*",
+        "Resource": "*"
       },
       {
-        Effect: "Allow",
-        Action: [
+        "Effect": "Allow",
+        "Action": [
           "logs:CreateLogGroup",
           "logs:CreateLogStream",
-          "logs:PutLogEvents",
+          "logs:PutLogEvents"
         ],
-        Resource: "arn:aws:logs:*:*:*",
+        "Resource": "arn:aws:logs:*:*:*"
       },
       {
-        Effect: "Allow",
-        Action: [
+        "Effect": "Allow",
+        "Action": [
           "ec2:CreateNetworkInterface",
           "ec2:DescribeDhcpOptions",
           "ec2:DescribeNetworkInterfaces",
@@ -435,36 +435,36 @@ const codeBuildPolicy = new aws.iam.Policy("pathfinder-codebuild-policy", {
           "ec2:DescribeSubnets",
           "ec2:DescribeSecurityGroups",
           "ec2:DescribeVpcs",
-          "ec2:CreateNetworkInterfacePermission",
+          "ec2:CreateNetworkInterfacePermission"
         ],
-        Resource: "*",
+        "Resource": "*"
       },
       {
-        Effect: "Allow",
-        Action: [
-          "secretsmanager:GetSecretValue",
+        "Effect": "Allow",
+        "Action": [
+          "secretsmanager:GetSecretValue"
         ],
-        Resource: "arn:aws:secretsmanager:us-east-1:*:secret:pathfinder-*",
+        "Resource": "arn:aws:secretsmanager:us-east-1:*:secret:pathfinder-*"
       },
       {
-        Effect: "Allow",
-        Action: [
+        "Effect": "Allow",
+        "Action": [
           "ecs:RunTask",
           "ecs:DescribeTasks",
           "ecs:DescribeTaskDefinition",
-          "ecs:ListTasks",
+          "ecs:ListTasks"
         ],
-        Resource: "*",
+        "Resource": "*"
       },
       {
-        Effect: "Allow",
-        Action: [
-          "iam:PassRole",
+        "Effect": "Allow",
+        "Action": [
+          "iam:PassRole"
         ],
-        Resource: executionRole.arn,
-      },
-    ],
-  }),
+        "Resource": "${executionRole.arn}"
+      }
+    ]
+  }`,
   tags: {
     ...commonTags,
     Name: "pathfinder-codebuild-policy",
