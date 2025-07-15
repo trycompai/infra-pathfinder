@@ -11,23 +11,7 @@ type TodoAppProps = {
 export default function TodoApp({ initialTodos }: TodoAppProps) {
   const [todos, setTodos] = useState<Todo[]>(initialTodos);
   const [newTodo, setNewTodo] = useState("");
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Refetch todos (mainly for after mutations if needed)
-  const refetchTodos = async () => {
-    try {
-      setLoading(true);
-      const updatedTodos = await todosApi.getTodos();
-      setTodos(updatedTodos);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load todos");
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const addTodo = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -109,9 +93,7 @@ export default function TodoApp({ initialTodos }: TodoAppProps) {
         </form>
 
         {/* Todo List */}
-        {loading ? (
-          <div className="text-center py-8">Loading todos...</div>
-        ) : todos.length === 0 ? (
+        {todos.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             No todos yet. Add one above!
           </div>
@@ -159,13 +141,6 @@ export default function TodoApp({ initialTodos }: TodoAppProps) {
           <h3 className="font-semibold mb-2">Debug Info:</h3>
           <p className="text-sm">Initial todos loaded: {initialTodos.length}</p>
           <p className="text-sm">Current todos count: {todos.length}</p>
-          <button
-            onClick={refetchTodos}
-            className="mt-2 px-4 py-2 bg-blue-500 text-white rounded-lg 
-                     hover:bg-blue-600 transition-colors text-sm"
-          >
-            Refetch Todos
-          </button>
         </div>
       </main>
     </div>
