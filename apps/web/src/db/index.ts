@@ -8,7 +8,7 @@ import * as schema from "./schema";
 const pool = new Pool({
   connectionString: env.DATABASE_URL,
   // Use AWS RDS CA bundle for proper SSL verification
-  ssl: env.DATABASE_URL.includes("localhost") ? false : awsCaBundle,
+  ssl: awsCaBundle,
 });
 
 // Create the database instance

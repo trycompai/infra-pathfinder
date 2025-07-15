@@ -3,6 +3,10 @@ import * as awsx from "@pulumi/awsx";
 import * as command from "@pulumi/command";
 import * as pulumi from "@pulumi/pulumi";
 import * as random from "@pulumi/random";
+import * as dotenv from "dotenv";
+
+// Load environment variables from .env file
+dotenv.config();
 
 // ==========================================
 // CONFIGURATION & SHARED SETTINGS
@@ -86,7 +90,7 @@ const serviceSecurityGroup = new aws.ec2.SecurityGroup(
   }
 );
 
-// Database Security Group - only allow access from the service
+// Database Security Group - initially allow access from ECS service only
 const dbSecurityGroup = new aws.ec2.SecurityGroup("pathfinder-db-sg", {
   vpcId: vpc.vpcId,
   ingress: [
@@ -94,7 +98,8 @@ const dbSecurityGroup = new aws.ec2.SecurityGroup("pathfinder-db-sg", {
       protocol: "tcp",
       fromPort: 5432,
       toPort: 5432,
-      securityGroups: [serviceSecurityGroup.id], // Only allow from ECS service
+      securityGroups: [serviceSecurityGroup.id], // Allow from ECS service
+      description: "Allow access from main application service",
     },
   ],
   egress: [
@@ -112,12 +117,73 @@ const dbSecurityGroup = new aws.ec2.SecurityGroup("pathfinder-db-sg", {
   },
 });
 
+// CodeBuild Security Group - allow database access and internet for builds
+const codeBuildSecurityGroup = new aws.ec2.SecurityGroup("pathfinder-codebuild-sg", {
+  vpcId: vpc.vpcId,
+  ingress: [], // No inbound rules needed - CodeBuild initiates connections
+  egress: [
+    {
+      protocol: "-1",
+      fromPort: 0,
+      toPort: 0,
+      cidrBlocks: ["0.0.0.0/0"], // Allow all outbound for package downloads and ECR push
+      description: "Allow all outbound traffic for builds",
+    },
+  ],
+  tags: {
+    ...commonTags,
+    Name: "pathfinder-codebuild-sg",
+    Type: "build",
+  },
+});
+
+// Tailscale Security Group - allow database access and internet for Tailscale connection
+const tailscaleSecurityGroup = new aws.ec2.SecurityGroup("pathfinder-tailscale-sg", {
+  vpcId: vpc.vpcId,
+  ingress: [], // No inbound rules needed - Tailscale initiates connections
+  egress: [
+    {
+      protocol: "-1",
+      fromPort: 0,
+      toPort: 0,
+      cidrBlocks: ["0.0.0.0/0"], // Allow all outbound for Tailscale connectivity
+      description: "Allow all outbound traffic for Tailscale",
+    },
+  ],
+  tags: {
+    ...commonTags,
+    Name: "pathfinder-tailscale-sg",
+    Type: "proxy",
+  },
+});
+
+// Additional database security group rules for CodeBuild and Tailscale access
+const dbCodeBuildRule = new aws.ec2.SecurityGroupRule("db-allow-codebuild", {
+  type: "ingress",
+  fromPort: 5432,
+  toPort: 5432,
+  protocol: "tcp",
+  sourceSecurityGroupId: codeBuildSecurityGroup.id,
+  securityGroupId: dbSecurityGroup.id,
+  description: "Allow CodeBuild access to database for Docker builds",
+});
+
+const dbTailscaleRule = new aws.ec2.SecurityGroupRule("db-allow-tailscale", {
+  type: "ingress",
+  fromPort: 5432,
+  toPort: 5432,
+  protocol: "tcp",
+  sourceSecurityGroupId: tailscaleSecurityGroup.id,
+  securityGroupId: dbSecurityGroup.id,
+  description: "Allow Tailscale proxy access to database for developer access",
+});
+
 // ==========================================
 // DATABASE LAYER
 // RDS PostgreSQL with auto-scaling storage
 // ==========================================
 
-// RDS Subnet Group - database should be in private subnets
+// RDS Subnet Group - keep database in private subnets
 const dbSubnetGroup = new aws.rds.SubnetGroup("pathfinder-db-subnet-group", {
   subnetIds: vpc.privateSubnetIds,
   tags: {
@@ -311,6 +377,105 @@ new aws.iam.RolePolicyAttachment("pathfinder-execution-role-policy", {
     "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
 });
 
+// CodeBuild Role for building Docker images inside VPC
+const codeBuildRole = new aws.iam.Role("pathfinder-codebuild-role", {
+  assumeRolePolicy: JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Action: "sts:AssumeRole",
+        Effect: "Allow",
+        Principal: {
+          Service: "codebuild.amazonaws.com",
+        },
+      },
+    ],
+  }),
+  tags: {
+    ...commonTags,
+    Name: "pathfinder-codebuild-role",
+  },
+});
+
+// CodeBuild policy for ECR, VPC, and CloudWatch access
+const codeBuildPolicy = new aws.iam.Policy("pathfinder-codebuild-policy", {
+  policy: JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Action: [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+          "ecr:GetAuthorizationToken",
+          "ecr:PutImage",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload",
+        ],
+        Resource: "*",
+      },
+      {
+        Effect: "Allow",
+        Action: [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+        ],
+        Resource: "arn:aws:logs:*:*:*",
+      },
+      {
+        Effect: "Allow",
+        Action: [
+          "ec2:CreateNetworkInterface",
+          "ec2:DescribeDhcpOptions",
+          "ec2:DescribeNetworkInterfaces",
+          "ec2:DeleteNetworkInterface",
+          "ec2:DescribeSubnets",
+          "ec2:DescribeSecurityGroups",
+          "ec2:DescribeVpcs",
+          "ec2:CreateNetworkInterfacePermission",
+        ],
+        Resource: "*",
+      },
+      {
+        Effect: "Allow",
+        Action: [
+          "secretsmanager:GetSecretValue",
+        ],
+        Resource: "arn:aws:secretsmanager:us-east-1:*:secret:pathfinder-*",
+      },
+      {
+        Effect: "Allow",
+        Action: [
+          "ecs:RunTask",
+          "ecs:DescribeTasks",
+          "ecs:DescribeTaskDefinition",
+          "ecs:ListTasks",
+        ],
+        Resource: "*",
+      },
+      {
+        Effect: "Allow",
+        Action: [
+          "iam:PassRole",
+        ],
+        Resource: executionRole.arn,
+      },
+    ],
+  }),
+  tags: {
+    ...commonTags,
+    Name: "pathfinder-codebuild-policy",
+  },
+});
+
+new aws.iam.RolePolicyAttachment("pathfinder-codebuild-policy-attachment", {
+  role: codeBuildRole.name,
+  policyArn: codeBuildPolicy.arn,
+});
+
 // ECR for storing Docker images
 const repo = new awsx.ecr.Repository("pathfinder-repo", {
   forceDelete: true, // Allow deletion even if images exist
@@ -321,19 +486,111 @@ const repo = new awsx.ecr.Repository("pathfinder-repo", {
   },
 });
 
+// CodeBuild Project for building Docker images inside VPC
+const codeBuildProject = new aws.codebuild.Project("pathfinder-codebuild", {
+  serviceRole: codeBuildRole.arn,
+  artifacts: {
+    type: "NO_ARTIFACTS", // We push directly to ECR
+  },
+  environment: {
+    computeType: "BUILD_GENERAL1_MEDIUM",
+    image: "aws/codebuild/standard:7.0",
+    type: "LINUX_CONTAINER",
+    privilegedMode: true, // Required for Docker builds
+    environmentVariables: [
+      {
+        name: "AWS_DEFAULT_REGION",
+        value: "us-east-1",
+      },
+      {
+        name: "AWS_ACCOUNT_ID",
+        value: aws.getCallerIdentity().then(id => id.accountId),
+      },
+      {
+        name: "IMAGE_REPO_NAME",
+        value: repo.repository.name,
+      },
+      {
+        name: "IMAGE_TAG",
+        value: "latest",
+      },
+      {
+        name: "DATABASE_URL",
+        value: pulumi.interpolate`postgresql://${db.username}:${dbPassword.result}@${db.endpoint}/${db.dbName}`,
+      },
+      {
+        name: "CLUSTER_NAME",
+        value: cluster.name,
+      },
+      {
+        name: "SUBNET_ID", 
+        value: vpc.privateSubnetIds[0], // Use first private subnet for migration
+      },
+      {
+        name: "SECURITY_GROUP_ID",
+        value: serviceSecurityGroup.id, // Same security group as main service
+      },
+    ],
+  },
+  source: {
+    type: "GITHUB",
+    location: "https://github.com/trycompai/infra-pathfinder.git",
+    gitCloneDepth: 1,
+    buildspec: "apps/web/buildspec.yml",
+  },
+  vpcConfig: {
+    vpcId: vpc.vpcId,
+    subnets: vpc.privateSubnetIds,
+    securityGroupIds: [codeBuildSecurityGroup.id],
+  },
+  tags: {
+    ...commonTags,
+    Name: "pathfinder-codebuild",
+    Type: "build-service",
+  },
+});
+
+// NOTE: Webhook removed - will use GitHub Actions to trigger CodeBuild instead
+// This avoids GitHub token authentication issues
+
+// Tailscale authentication key secret
+const tailscaleAuthKey = new aws.secretsmanager.Secret("pathfinder-tailscale-authkey", {
+  description: "Tailscale authentication key for RDS proxy service",
+  tags: {
+    ...commonTags,
+    Name: "pathfinder-tailscale-authkey",
+    Type: "secret",
+  },
+});
+
+// Store the Tailscale auth key from environment variable
+const tailscaleAuthKeyValue = new aws.secretsmanager.SecretVersion("pathfinder-tailscale-authkey-value", {
+  secretId: tailscaleAuthKey.id,
+  secretString: process.env.TAILSCALE_AUTH_KEY || "MISSING_TAILSCALE_KEY",
+});
+
+// GitHub personal access token secret for CodeBuild webhooks  
+const githubToken = new aws.secretsmanager.Secret("pathfinder-github-token", {
+  description: "GitHub personal access token for CodeBuild webhooks",
+  tags: {
+    ...commonTags,
+    Name: "pathfinder-github-token", 
+    Type: "secret",
+  },
+});
+
+// Store the GitHub token from environment variable
+const githubTokenValue = new aws.secretsmanager.SecretVersion("pathfinder-github-token-value", {
+  secretId: githubToken.id,
+  secretString: process.env.GITHUB_TOKEN || "MISSING_GITHUB_TOKEN",
+});
+
 // ==========================================
 // TWO-PHASE BUILD: MIGRATIONS FIRST, THEN APP
 // ==========================================
 
-// Phase 1: Build lightweight migration image
-const migrationImageUri = new awsx.ecr.Image("pathfinder-migration-image", {
-  repositoryUrl: repo.url,
-  context: "../web",
-  dockerfile: "../web/Dockerfile.migration",
-  platform: "linux/amd64",
-}, {
-  dependsOn: [db]
-}).imageUri;
+// Phase 1: Reference migration image (built by CodeBuild)
+const migrationImageUri = pulumi.interpolate`${repo.url}:migration-latest`;
 
 // ECS Task Definition for running migrations
 const migrationTaskDef = new aws.ecs.TaskDefinition("pathfinder-migration-task", {
@@ -371,68 +628,57 @@ const migrationTaskDef = new aws.ecs.TaskDefinition("pathfinder-migration-task",
   },
 });
 
-// Run the migration task and wait for completion
-const runMigrationCommand = new command.local.Command("run-migration-command", {
+// Trigger CodeBuild to build images and run migrations  
+const buildImagesAndMigrate = new command.local.Command("build-images-and-migrate", {
   create: pulumi.interpolate`
     set -euo pipefail  # Exit on any error, undefined vars, or pipe failures
     
-    echo "🚀 Starting database migration task..."
+    echo "🚀 Starting CodeBuild to build images and run migrations..."
     
-    # Run migration task (using first private subnet - sufficient for one-time migration)
-    TASK_ARN=$(aws ecs run-task \
-      --cluster ${cluster.name} \
-      --task-definition ${migrationTaskDef.arn} \
-      --network-configuration "awsvpcConfiguration={subnets=[${vpc.privateSubnetIds[0]}],securityGroups=[${serviceSecurityGroup.id}],assignPublicIp=ENABLED}" \
-      --launch-type FARGATE \
+    # Start CodeBuild project
+    BUILD_ID=$(aws codebuild start-build \
+      --project-name ${codeBuildProject.name} \
       --region ${aws.config.region} \
-      --query 'tasks[0].taskArn' \
+      --query 'build.id' \
       --output text)
     
-    if [ -z "$TASK_ARN" ] || [ "$TASK_ARN" = "None" ]; then
-      echo "❌ Failed to start migration task"
+    if [ -z "$BUILD_ID" ] || [ "$BUILD_ID" = "None" ]; then
+      echo "❌ Failed to start CodeBuild"
       exit 1
     fi
     
-    echo "📋 Migration task started: $TASK_ARN"
+    echo "📋 CodeBuild started: $BUILD_ID"
     
-    # Wait for task to complete
-    echo "⏳ Waiting for migration to complete..."
-    aws ecs wait tasks-stopped \
-      --cluster ${cluster.name} \
-      --tasks $TASK_ARN \
-      --region ${aws.config.region}
-    
-    # Check if task succeeded
-    EXIT_CODE=$(aws ecs describe-tasks \
-      --cluster ${cluster.name} \
-      --tasks $TASK_ARN \
-      --region ${aws.config.region} \
-      --query 'tasks[0].containers[0].exitCode' \
-      --output text)
-    
-    if [ -z "$EXIT_CODE" ] || [ "$EXIT_CODE" != "0" ]; then
-      echo "❌ Migration task failed with exit code: $EXIT_CODE"
-      echo "📋 Check CloudWatch logs at log group: ${logGroup.name}"
-      exit 1
-    fi
-    
-    echo "✅ Migration completed successfully"
+    # Wait for build to complete (polling approach since AWS CLI doesn't have wait build-complete)
+    echo "⏳ Waiting for CodeBuild to complete (this builds images and runs migrations)..."
+    while true; do
+      BUILD_STATUS=$(aws codebuild batch-get-builds \
+        --ids $BUILD_ID \
+        --region ${aws.config.region} \
+        --query 'builds[0].buildStatus' \
+        --output text)
+      
+      echo "Current build status: $BUILD_STATUS"
+      
+      if [ "$BUILD_STATUS" = "SUCCEEDED" ]; then
+        echo "✅ CodeBuild completed successfully!"
+        break
+      elif [ "$BUILD_STATUS" = "FAILED" ] || [ "$BUILD_STATUS" = "FAULT" ] || [ "$BUILD_STATUS" = "STOPPED" ] || [ "$BUILD_STATUS" = "TIMED_OUT" ]; then
+        echo "❌ CodeBuild failed with status: $BUILD_STATUS"
+        echo "📋 Check CodeBuild logs in AWS Console"
+        exit 1
+      fi
+      
+      echo "Build still in progress... waiting 30 seconds"
+      sleep 30
+    done
   `,
 }, {
-  dependsOn: [migrationTaskDef, cluster]
+  dependsOn: [codeBuildProject, db, cluster]
 });
 
-// Phase 2: Build full app image (DB is now migrated, so SSG will work)
-const imageUri = new awsx.ecr.Image("pathfinder-image", {
-  repositoryUrl: repo.url,
-  context: "../web",
-  platform: "linux/amd64", // Required for AWS Fargate
-  args: {
-    DATABASE_URL: pulumi.interpolate`postgresql://${db.username}:${db.password}@${db.endpoint}/${db.dbName}`,
-  },
-}, {
-  dependsOn: [runMigrationCommand] // Wait for migrations to complete
-}).imageUri;
+// Phase 2: Reference app image (built by CodeBuild with database access)
+const imageUri = pulumi.interpolate`${repo.url}:latest`;
 
 // Fargate Service (migrations already completed during deployment)
 const service = new awsx.ecs.FargateService("pathfinder-service", {
@@ -490,6 +736,65 @@ const service = new awsx.ecs.FargateService("pathfinder-service", {
       },
     },
   },
+}, {
+  dependsOn: [buildImagesAndMigrate] // Wait for CodeBuild to build images and run migrations
+});
+
+// Tailscale RDS Proxy Service
+const tailscaleService = new awsx.ecs.FargateService("pathfinder-tailscale-proxy", {
+  cluster: cluster.arn,
+  networkConfiguration: {
+    subnets: vpc.privateSubnetIds,
+    securityGroups: [tailscaleSecurityGroup.id],
+    assignPublicIp: true, // Needed for Tailscale connectivity
+  },
+  desiredCount: 1,
+  taskDefinitionArgs: {
+    executionRole: {
+      roleArn: executionRole.arn,
+    },
+    containers: {
+      "tailscale-proxy": {
+        name: "tailscale-proxy",
+        image: "tailscale/tailscale:stable",
+        cpu: 256, // 0.25 vCPU - minimal resources needed
+        memory: 512, // 512MB
+        essential: true,
+        environment: [
+          {
+            name: "TS_HOSTNAME",
+            value: "pathfinder-rds-proxy",
+          },
+        ],
+        secrets: [
+          {
+            name: "TS_AUTHKEY",
+            valueFrom: tailscaleAuthKey.arn,
+          },
+        ],
+        command: [
+          "/bin/sh", 
+          "-c", 
+          pulumi.interpolate`mkdir -p /tmp/tailscale && /usr/local/bin/tailscaled --tun=userspace-networking --socks5-server=localhost:1055 & /usr/local/bin/tailscale up --auth-key=$TS_AUTHKEY --hostname=$TS_HOSTNAME && apk add --no-cache socat && socat TCP-LISTEN:5432,fork,reuseaddr TCP:${db.endpoint}:5432`
+        ],
+        portMappings: [
+          {
+            containerPort: 5432,
+          },
+        ],
+        logConfiguration: {
+          logDriver: "awslogs",
+          options: {
+            "awslogs-group": logGroup.name,
+            "awslogs-region": aws.config.region,
+            "awslogs-stream-prefix": "tailscale-proxy",
+          },
+        },
+      },
+    },
+  },
+}, {
+  dependsOn: [buildImagesAndMigrate] // Wait for CodeBuild to build images before starting proxy
 });
 
 // ==========================================
@@ -797,10 +1102,14 @@ export const dbUsername = db.username;
 
 // Migration information
 export const migrationTaskArn = migrationTaskDef.arn;
-export const migrationStatus = runMigrationCommand.stdout;
+export const migrationStatus = buildImagesAndMigrate.stdout;
 
 // Better Stack logging information
 export const betterStackLambdaArn = betterStackLambda.arn;
 export const betterStackLambdaName = betterStackLambda.name;
 export const logGroupName = logGroup.name;
 export const rdsLogGroupName = rdsLogGroup.name;
+
+// CodeBuild outputs for GitHub Actions integration
+export const codeBuildProjectName = codeBuildProject.name;
+export const ecrRepositoryUrl = repo.url;
