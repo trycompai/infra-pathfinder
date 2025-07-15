@@ -5,10 +5,46 @@ phases:
     commands:
       - echo "Logging in to Amazon ECR..."
       - aws --version
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - REPOSITORY_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - IMAGE_TAG=${COMMIT_HASH:=latest}
+      - echo "Repository URI is $REPOSITORY_URI"
+      - echo "Image tag is $IMAGE_TAG"
+      - echo "DATABASE_URL is configured for build-time access"
+
   build:
     commands:
-      - echo "Build started"
-      - echo "Test build phase"
+      - echo "Build started on $(date)"
+      - echo "=== PHASE 1: Building and pushing migration image ==="
+      - cd apps/web
+      - docker build -f Dockerfile.migration -t $IMAGE_REPO_NAME:migration-$IMAGE_TAG .
+      - docker tag $IMAGE_REPO_NAME:migration-$IMAGE_TAG $REPOSITORY_URI:migration-$IMAGE_TAG
+      - docker tag $IMAGE_REPO_NAME:migration-$IMAGE_TAG $REPOSITORY_URI:migration-latest
+      - docker push $REPOSITORY_URI:migration-$IMAGE_TAG
+      - docker push $REPOSITORY_URI:migration-latest
+      - echo "=== PHASE 2: Running database migrations ==="
+      - TASK_ARN=$(aws ecs run-task --cluster $CLUSTER_NAME --task-definition pathfinder-migration --network-configuration "awsvpcConfiguration={subnets=[$SUBNET_ID],securityGroups=[$SECURITY_GROUP_ID],assignPublicIp=ENABLED}" --launch-type FARGATE --query 'tasks[0].taskArn' --output text)
+      - echo "Migration task started: $TASK_ARN"
+      - aws ecs wait tasks-stopped --cluster $CLUSTER_NAME --tasks $TASK_ARN
+      - EXIT_CODE=$(aws ecs describe-tasks --cluster $CLUSTER_NAME --tasks $TASK_ARN --query 'tasks[0].containers[0].exitCode' --output text)
+      - if [ "$EXIT_CODE" != "0" ]; then echo "Migration failed with exit code: $EXIT_CODE"; exit 1; fi
+      - echo "Migrations completed successfully!"
+      - echo "=== PHASE 3: Building main app image with database access ==="
+      - docker build --build-arg DATABASE_URL=$DATABASE_URL -t $IMAGE_REPO_NAME:$IMAGE_TAG .
+      - docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $REPOSITORY_URI:$IMAGE_TAG
+      - docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $REPOSITORY_URI:latest
+
   post_build:
     commands:
-      - echo "Build completed" 
+      - echo "Build completed on $(date)"
+      - echo "Pushing the Docker images..."
+      - docker push $REPOSITORY_URI:$IMAGE_TAG
+      - docker push $REPOSITORY_URI:latest
+      - echo "Writing image definitions file..."
+      - printf '[{"name":"pathfinder-app","imageUri":"%s"}]' $REPOSITORY_URI:$IMAGE_TAG > imagedefinitions.json
+
+artifacts:
+  files:
+    - imagedefinitions.json
+  name: pathfinder-build-$(date +%Y-%m-%d) 
