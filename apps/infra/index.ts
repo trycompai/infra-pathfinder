@@ -631,7 +631,7 @@ const migrationTaskDef = new aws.ecs.TaskDefinition("pathfinder-migration-task",
 // Trigger CodeBuild to build images and run migrations  
 const buildImagesAndMigrate = new command.local.Command("build-images-and-migrate", {
   create: pulumi.interpolate`
-    set -euo pipefail  # Exit on any error, undefined vars, or pipe failures
+    set -eu  # Exit on any error, undefined vars (pipefail not supported in sh)
     
     echo "🚀 Starting CodeBuild to build images and run migrations..."
     
