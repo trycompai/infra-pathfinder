@@ -10,8 +10,6 @@ export default async function Home() {
     .from(todos)
     .orderBy(desc(todos.createdAt));
 
-  console.log("initialTodos", initialTodos);
-
   return (
     <div>
       <TodoApp initialTodos={initialTodos} />

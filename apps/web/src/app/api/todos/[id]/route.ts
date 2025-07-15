@@ -1,5 +1,6 @@
 import { db, todos } from "@/db";
 import { eq } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 
 // PUT /api/todos/[id] - Update a todo
@@ -53,6 +54,8 @@ export async function PUT(
       );
     }
 
+    revalidatePath("/");
+
     return NextResponse.json({
       success: true,
       data: updatedTodo,
@@ -92,6 +95,8 @@ export async function DELETE(
       .where(eq(todos.id, id))
       .returning();
 
+    revalidatePath("/");
+
     if (!deletedTodo) {
       return NextResponse.json(
         { 
@@ -101,6 +106,8 @@ export async function DELETE(
         { status: 404 }
       );
     }
+
+    revalidatePath("/");
 
     return NextResponse.json({ 
       success: true,

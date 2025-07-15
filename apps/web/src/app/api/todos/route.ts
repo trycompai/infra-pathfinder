@@ -1,30 +1,6 @@
 import { db, todos } from "@/db";
-import { desc } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
-
-// GET /api/todos - List all todos (simplified, mainly for refetch after mutations)
-export async function GET() {
-  try {
-    const allTodos = await db
-      .select()
-      .from(todos)
-      .orderBy(desc(todos.createdAt));
-
-    return NextResponse.json({
-      success: true,
-      data: allTodos,
-    });
-  } catch (error) {
-    console.error("Error fetching todos:", error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Failed to fetch todos",
-      },
-      { status: 500 }
-    );
-  }
-}
 
 // POST /api/todos - Create a new todo
 export async function POST(request: Request) {
@@ -48,6 +24,8 @@ export async function POST(request: Request) {
         completed: false,
       })
       .returning();
+
+    revalidatePath("/");
 
     return NextResponse.json({
       success: true,
