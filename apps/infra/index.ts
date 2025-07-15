@@ -357,18 +357,18 @@ const logGroup = new aws.cloudwatch.LogGroup("pathfinder-logs", {
 
 // ECS needs this role to pull images and write logs
 const executionRole = new aws.iam.Role("pathfinder-execution-role", {
-  assumeRolePolicy: JSON.stringify({
-    Version: "2012-10-17",
-    Statement: [
+  assumeRolePolicy: `{
+    "Version": "2012-10-17",
+    "Statement": [
       {
-        Action: "sts:AssumeRole",
-        Effect: "Allow",
-        Principal: {
-          Service: "ecs-tasks.amazonaws.com",
-        },
-      },
-    ],
-  }),
+        "Action": "sts:AssumeRole",
+        "Effect": "Allow",
+        "Principal": {
+          "Service": "ecs-tasks.amazonaws.com"
+        }
+      }
+    ]
+  }`,
 });
 
 new aws.iam.RolePolicyAttachment("pathfinder-execution-role-policy", {
@@ -379,18 +379,18 @@ new aws.iam.RolePolicyAttachment("pathfinder-execution-role-policy", {
 
 // CodeBuild Role for building Docker images inside VPC
 const codeBuildRole = new aws.iam.Role("pathfinder-codebuild-role", {
-  assumeRolePolicy: JSON.stringify({
-    Version: "2012-10-17",
-    Statement: [
+  assumeRolePolicy: `{
+    "Version": "2012-10-17",
+    "Statement": [
       {
-        Action: "sts:AssumeRole",
-        Effect: "Allow",
-        Principal: {
-          Service: "codebuild.amazonaws.com",
-        },
-      },
-    ],
-  }),
+        "Action": "sts:AssumeRole",
+        "Effect": "Allow",
+        "Principal": {
+          "Service": "codebuild.amazonaws.com"
+        }
+      }
+    ]
+  }`,
   tags: {
     ...commonTags,
     Name: "pathfinder-codebuild-role",
@@ -911,18 +911,18 @@ const albResponseTimeAlarm = new aws.cloudwatch.MetricAlarm(
 const betterStackLambdaRole = new aws.iam.Role(
   "pathfinder-better-stack-lambda-role",
   {
-    assumeRolePolicy: JSON.stringify({
-      Version: "2012-10-17",
-      Statement: [
+    assumeRolePolicy: `{
+      "Version": "2012-10-17",
+      "Statement": [
         {
-          Action: "sts:AssumeRole",
-          Effect: "Allow",
-          Principal: {
-            Service: "lambda.amazonaws.com",
-          },
-        },
-      ],
-    }),
+          "Action": "sts:AssumeRole",
+          "Effect": "Allow",
+          "Principal": {
+            "Service": "lambda.amazonaws.com"
+          }
+        }
+      ]
+    }`,
     tags: {
       ...commonTags,
       Name: "pathfinder-better-stack-lambda-role",
@@ -945,20 +945,20 @@ new aws.iam.RolePolicyAttachment(
 const betterStackLambdaPolicy = new aws.iam.Policy(
   "pathfinder-better-stack-lambda-policy",
   {
-    policy: JSON.stringify({
-      Version: "2012-10-17",
-      Statement: [
+    policy: `{
+      "Version": "2012-10-17",
+      "Statement": [
         {
-          Effect: "Allow",
-          Action: [
+          "Effect": "Allow",
+          "Action": [
             "logs:CreateLogGroup",
             "logs:CreateLogStream",
-            "logs:PutLogEvents",
+            "logs:PutLogEvents"
           ],
-          Resource: "arn:aws:logs:*:*:*",
-        },
-      ],
-    }),
+          "Resource": "arn:aws:logs:*:*:*"
+        }
+      ]
+    }`,
     tags: {
       ...commonTags,
       Name: "pathfinder-better-stack-lambda-policy",
@@ -1080,11 +1080,7 @@ const betterStackLambdaPermissionRDS = new aws.lambda.Permission(
     action: "lambda:InvokeFunction",
     function: betterStackLambda.name,
     principal: "logs.amazonaws.com",
-    sourceArn: pulumi.interpolate`arn:aws:logs:${aws.config.region}:${aws
-      .getCallerIdentity()
-      .then((id) => id.accountId)}:log-group:/aws/rds/instance/${
-      db.id
-    }/postgresql:*`,
+    sourceArn: pulumi.interpolate`${rdsLogGroup.arn}:*`,
   }
 );
 
