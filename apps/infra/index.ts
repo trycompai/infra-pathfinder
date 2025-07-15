@@ -147,6 +147,7 @@ const db = new aws.rds.Instance("pathfinder-db", {
   password: dbPassword.result, // Use the generated secure password
   vpcSecurityGroupIds: [dbSecurityGroup.id],
   dbSubnetGroupName: dbSubnetGroup.name,
+
   skipFinalSnapshot: true, // For dev - set to false in production
   deletionProtection: false, // For dev - set to true in production
   backupRetentionPeriod: 7, // Keep backups for 7 days
@@ -317,7 +318,108 @@ const repo = new awsx.ecr.Repository("pathfinder-repo", {
   },
 });
 
-// Build Docker image with database dependency and build-time args
+// ==========================================
+// TWO-PHASE BUILD: MIGRATIONS FIRST, THEN APP
+// ==========================================
+
+// Phase 1: Build lightweight migration image
+const migrationImageUri = new awsx.ecr.Image("pathfinder-migration-image", {
+  repositoryUrl: repo.url,
+  context: "../web",
+  dockerfile: "../web/Dockerfile.migration",
+  platform: "linux/amd64",
+}, {
+  dependsOn: [db]
+}).imageUri;
+
+// ECS Task Definition for running migrations
+const migrationTaskDef = new aws.ecs.TaskDefinition("pathfinder-migration-task", {
+  family: "pathfinder-migration",
+  networkMode: "awsvpc",
+  requiresCompatibilities: ["FARGATE"],
+  cpu: "256",
+  memory: "512",
+  executionRoleArn: executionRole.arn,
+  containerDefinitions: pulumi.jsonStringify([
+    {
+      name: "migration-runner",
+      image: migrationImageUri,
+      essential: true,
+      environment: [
+        {
+          name: "DATABASE_URL",
+          value: pulumi.interpolate`postgresql://${db.username}:${db.password}@${db.endpoint}/${db.dbName}`,
+        },
+      ],
+      logConfiguration: {
+        logDriver: "awslogs",
+        options: {
+          "awslogs-group": logGroup.name,
+          "awslogs-region": aws.config.region!,
+          "awslogs-stream-prefix": "migration-task",
+          "awslogs-create-group": "true",
+        },
+      },
+    },
+  ]),
+  tags: {
+    ...commonTags,
+    Name: "pathfinder-migration-task",
+  },
+});
+
+// Run the migration task and wait for completion
+const runMigrationCommand = new command.local.Command("run-migration-command", {
+  create: pulumi.interpolate`
+    set -euo pipefail  # Exit on any error, undefined vars, or pipe failures
+    
+    echo "🚀 Starting database migration task..."
+    
+    # Run migration task (using first private subnet - sufficient for one-time migration)
+    TASK_ARN=$(aws ecs run-task \
+      --cluster ${cluster.name} \
+      --task-definition ${migrationTaskDef.arn} \
+      --network-configuration "awsvpcConfiguration={subnets=[${vpc.privateSubnetIds[0]}],securityGroups=[${serviceSecurityGroup.id}],assignPublicIp=ENABLED}" \
+      --launch-type FARGATE \
+      --region ${aws.config.region} \
+      --query 'tasks[0].taskArn' \
+      --output text)
+    
+    if [ -z "$TASK_ARN" ] || [ "$TASK_ARN" = "None" ]; then
+      echo "❌ Failed to start migration task"
+      exit 1
+    fi
+    
+    echo "📋 Migration task started: $TASK_ARN"
+    
+    # Wait for task to complete
+    echo "⏳ Waiting for migration to complete..."
+    aws ecs wait tasks-stopped \
+      --cluster ${cluster.name} \
+      --tasks $TASK_ARN \
+      --region ${aws.config.region}
+    
+    # Check if task succeeded
+    EXIT_CODE=$(aws ecs describe-tasks \
+      --cluster ${cluster.name} \
+      --tasks $TASK_ARN \
+      --region ${aws.config.region} \
+      --query 'tasks[0].containers[0].exitCode' \
+      --output text)
+    
+    if [ -z "$EXIT_CODE" ] || [ "$EXIT_CODE" != "0" ]; then
+      echo "❌ Migration task failed with exit code: $EXIT_CODE"
+      echo "📋 Check CloudWatch logs at log group: ${logGroup.name}"
+      exit 1
+    fi
+    
+    echo "✅ Migration completed successfully"
+  `,
+}, {
+  dependsOn: [migrationTaskDef, cluster]
+});
+
+// Phase 2: Build full app image (DB is now migrated, so SSG will work)
 const imageUri = new awsx.ecr.Image("pathfinder-image", {
   repositoryUrl: repo.url,
   context: "../web",
@@ -326,10 +428,10 @@ const imageUri = new awsx.ecr.Image("pathfinder-image", {
     DATABASE_URL: pulumi.interpolate`postgresql://${db.username}:${db.password}@${db.endpoint}/${db.dbName}`,
   },
 }, {
-  dependsOn: [db] // Ensure database is fully created before building image
+  dependsOn: [runMigrationCommand] // Wait for migrations to complete
 }).imageUri;
 
-// Fargate Service with init container for migrations
+// Fargate Service (migrations already completed during deployment)
 const service = new awsx.ecs.FargateService("pathfinder-service", {
   cluster: cluster.arn,
   networkConfiguration: {
@@ -343,43 +445,13 @@ const service = new awsx.ecs.FargateService("pathfinder-service", {
       roleArn: executionRole.arn,
     },
     containers: {
-      // Init container that runs migrations first
-      "migration-runner": {
-        name: "migration-runner",
-        image: imageUri,
-        cpu: 256, // 0.25 vCPU
-        memory: 512, // 512MB - enough for migrations
-        essential: false, // This container can exit after migrations complete
-        environment: [
-          {
-            name: "DATABASE_URL",
-            value: pulumi.interpolate`postgresql://${db.username}:${db.password}@${db.endpoint}/${db.dbName}`,
-          },
-        ],
-        command: ["bun", "run", "scripts/run-migrations.ts"],
-        workingDirectory: "/app",
-        logConfiguration: {
-          logDriver: "awslogs",
-          options: {
-            "awslogs-group": logGroup.name,
-            "awslogs-region": aws.config.region,
-            "awslogs-stream-prefix": "pathfinder-migrations",
-          },
-        },
-      },
-      // Main application container
+      // Main application container (migrations already completed)
       "pathfinder-app": {
         name: "pathfinder-app",
         image: imageUri,
         cpu: 1024, // 1 vCPU
         memory: 2048, // 2GB
         essential: true,
-        dependsOn: [
-          {
-            containerName: "migration-runner",
-            condition: "SUCCESS", // Wait for migrations to complete successfully
-          },
-        ],
         environment: [
           {
             name: "HOSTNAME",
@@ -719,6 +791,10 @@ export const dbConnectionString = pulumi.interpolate`postgresql://${db.username}
 // Export password as a secret - only visible via CLI with --show-secrets flag
 export const dbPasswordSecret = pulumi.secret(dbPassword.result);
 export const dbUsername = db.username;
+
+// Migration information
+export const migrationTaskArn = migrationTaskDef.arn;
+export const migrationStatus = runMigrationCommand.stdout;
 
 // Better Stack logging information
 export const betterStackLambdaArn = betterStackLambda.arn;

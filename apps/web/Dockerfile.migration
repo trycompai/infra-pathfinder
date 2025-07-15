@@ -1,0 +1,17 @@
+# Lightweight migration-only Docker image
+FROM oven/bun:1.2.18-alpine
+
+WORKDIR /app
+
+# Copy only what's needed for migrations
+COPY package.json bun.lock* ./
+COPY src/db ./src/db
+COPY src/env.ts ./src/env.ts
+COPY scripts ./scripts
+COPY drizzle.config.ts ./
+
+# Install only production dependencies
+RUN bun install --frozen-lockfile --production
+
+# Default command runs migrations
+CMD ["bun", "run", "scripts/run-migrations.ts"] 
