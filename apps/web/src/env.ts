@@ -13,8 +13,9 @@ export const env = createEnv({
     // NEXT_PUBLIC_*: z.string(),
   },
   // For Next.js >= 13.4.4, you only need to destructure client variables:
-  experimental__runtimeEnv: {
-    // No client env vars currently
+  runtimeEnv: {
+    DATABASE_URL: process.env.DATABASE_URL,
+    NODE_ENV: process.env.NODE_ENV,
   },
   // Allow skipping validation for development scenarios
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,

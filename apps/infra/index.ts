@@ -1,7 +1,7 @@
 import * as aws from "@pulumi/aws";
 import * as awsx from "@pulumi/awsx";
-import * as pulumi from "@pulumi/pulumi";
 import * as command from "@pulumi/command";
+import * as pulumi from "@pulumi/pulumi";
 import * as random from "@pulumi/random";
 
 // ==========================================
@@ -317,11 +317,16 @@ const repo = new awsx.ecr.Repository("pathfinder-repo", {
   },
 });
 
-// Always build Docker image locally and push to ECR
+// Build Docker image with database dependency and build-time args
 const imageUri = new awsx.ecr.Image("pathfinder-image", {
   repositoryUrl: repo.url,
   context: "../web",
   platform: "linux/amd64", // Required for AWS Fargate
+  args: {
+    DATABASE_URL: pulumi.interpolate`postgresql://${db.username}:${db.password}@${db.endpoint}/${db.dbName}`,
+  },
+}, {
+  dependsOn: [db] // Ensure database is fully created before building image
 }).imageUri;
 
 // Fargate Service with init container for migrations

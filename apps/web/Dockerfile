@@ -10,8 +10,9 @@ RUN bun install --frozen-lockfile
 FROM oven/bun:1.2.18-alpine AS builder
 WORKDIR /app
 
-# Skip environment validation during build (DATABASE_URL is runtime-only)
-ENV SKIP_ENV_VALIDATION=true
+# Accept DATABASE_URL as build argument
+ARG DATABASE_URL
+ENV DATABASE_URL=$DATABASE_URL
 
 # Copy dependencies from previous stage
 COPY --from=deps /app/node_modules ./node_modules

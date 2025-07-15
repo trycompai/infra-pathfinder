@@ -5,11 +5,10 @@ import type { Todo } from "@/types/api";
 import { useState } from "react";
 
 type TodoAppProps = {
-  databaseUrl: string;
   initialTodos: Todo[];
 };
 
-export default function TodoApp({ databaseUrl, initialTodos }: TodoAppProps) {
+export default function TodoApp({ initialTodos }: TodoAppProps) {
   const [todos, setTodos] = useState<Todo[]>(initialTodos);
   const [newTodo, setNewTodo] = useState("");
   const [loading, setLoading] = useState(false);

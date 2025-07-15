@@ -10,12 +10,11 @@ export default async function Home() {
     .from(todos)
     .orderBy(desc(todos.createdAt));
 
+  console.log("initialTodos", initialTodos);
+
   return (
     <div>
-      <TodoApp 
-        databaseUrl={env.DATABASE_URL} 
-        initialTodos={initialTodos}
-      />
+      <TodoApp initialTodos={initialTodos} />
       <div
         style={{
           position: "fixed",
