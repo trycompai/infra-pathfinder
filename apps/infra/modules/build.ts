@@ -88,37 +88,7 @@ export function createBuildSystem(config: CommonConfig, network: NetworkOutputs,
     })),
   });
 
-  // Security group for CodeBuild to access database
-  const codebuildSecurityGroup = new aws.ec2.SecurityGroup("pathfinder-codebuild-sg-v2", {
-    name: "pathfinder-codebuild-sg-v2",
-    description: "Security group for CodeBuild to access database and external services",
-    vpcId: network.vpcId,
-    egress: [
-      {
-        description: "All outbound traffic",
-        fromPort: 0,
-        toPort: 0,
-        protocol: "-1",
-        cidrBlocks: ["0.0.0.0/0"],
-      },
-    ],
-    tags: {
-      ...commonTags,
-      Name: "pathfinder-codebuild-sg-v2",
-      Type: "security-group",
-    },
-  });
 
-  // Allow CodeBuild to access the database
-  const codebuildToDbRule = new aws.ec2.SecurityGroupRule("pathfinder-codebuild-to-db-v2", {
-    type: "ingress",
-    fromPort: 5432,
-    toPort: 5432,
-    protocol: "tcp",
-    securityGroupId: network.securityGroups.database,
-    sourceSecurityGroupId: codebuildSecurityGroup.id,
-    description: "Allow CodeBuild to access PostgreSQL database",
-  });
 
   // CodeBuild project for building and deploying the application (includes migrations)
   const appProject = new aws.codebuild.Project("pathfinder-app-build", {
@@ -179,7 +149,7 @@ export function createBuildSystem(config: CommonConfig, network: NetworkOutputs,
     vpcConfig: {
       vpcId: network.vpcId,
       subnets: network.publicSubnetIds,
-      securityGroupIds: [codebuildSecurityGroup.id],
+      securityGroupIds: [network.securityGroups.codeBuild],
     },
     source: {
       type: "GITHUB",
