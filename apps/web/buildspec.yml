@@ -17,18 +17,18 @@ phases:
     commands:
       - echo "Build started on $(date)"
       - cd apps/web
-      - echo "=== PHASE 1: Installing dependencies ==="
+      - echo "PHASE 1: Installing dependencies"
       - bun install --frozen-lockfile
-      - echo "=== PHASE 2: Running database migrations directly ==="
+      - echo "PHASE 2: Running database migrations directly"
       - echo "Running migrations with DATABASE_URL (masked for security)"
       - bun run scripts/run-migrations.ts
-      - echo "=== PHASE 3: Building migration image (for consistency) ==="
+      - echo "PHASE 3: Building migration image (for consistency)"
       - docker build -f Dockerfile.migration -t $IMAGE_REPO_NAME:migration-$IMAGE_TAG .
       - docker tag $IMAGE_REPO_NAME:migration-$IMAGE_TAG $REPOSITORY_URI:migration-$IMAGE_TAG
       - docker tag $IMAGE_REPO_NAME:migration-$IMAGE_TAG $REPOSITORY_URI:migration-latest
       - docker push $REPOSITORY_URI:migration-$IMAGE_TAG
       - docker push $REPOSITORY_URI:migration-latest
-      - echo "=== PHASE 4: Building main app image with database access ==="
+      - echo "PHASE 4: Building main app image with database access"
       - docker build --build-arg DATABASE_URL=$DATABASE_URL -t $IMAGE_REPO_NAME:$IMAGE_TAG .
       - docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $REPOSITORY_URI:$IMAGE_TAG
       - docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $REPOSITORY_URI:latest
