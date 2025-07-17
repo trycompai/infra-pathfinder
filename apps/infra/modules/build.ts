@@ -144,16 +144,16 @@ export function createBuildSystem(config: CommonConfig, network: NetworkOutputs,
         },
       ],
     },
+    vpcConfig: {
+      vpcId: network.vpcId,
+      subnets: network.privateSubnetIds,
+      securityGroupIds: [network.securityGroups.database],
+    },
     source: {
       type: "GITHUB",
       location: `https://github.com/${config.githubOrg}/${config.githubRepo}.git`,
       buildspec: "apps/web/buildspec.yml",
       gitCloneDepth: 1,
-    },
-    vpcConfig: {
-      vpcId: network.vpcId,
-      subnets: network.privateSubnetIds,
-      securityGroupIds: [network.securityGroups.codeBuild],
     },
     tags: {
       ...commonTags,
