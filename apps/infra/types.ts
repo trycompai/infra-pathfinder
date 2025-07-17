@@ -106,6 +106,8 @@ export interface NetworkOutputs {
     s3: pulumi.Output<string>;
     ecrApi: pulumi.Output<string>;
     ecrDkr: pulumi.Output<string>;
+    codebuild: pulumi.Output<string>;
+    logs: pulumi.Output<string>;
   };
 }
 
