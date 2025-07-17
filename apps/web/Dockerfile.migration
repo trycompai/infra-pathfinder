@@ -3,8 +3,9 @@ FROM public.ecr.aws/lambda/nodejs:18-x86_64
 
 WORKDIR /app
 
-# Install Bun (same package manager as main app)
-RUN curl -fsSL https://bun.sh/install | bash && \
+# Install unzip (required for Bun installer) and Bun
+RUN yum update -y && yum install -y unzip && \
+    curl -fsSL https://bun.sh/install | bash && \
     ln -s /root/.bun/bin/bun /usr/local/bin/bun
 
 # Copy package files first for better caching (including bun.lock)

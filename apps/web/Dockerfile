@@ -2,8 +2,9 @@
 FROM public.ecr.aws/lambda/nodejs:18-x86_64 AS deps
 WORKDIR /app
 
-# Install Bun
-RUN curl -fsSL https://bun.sh/install | bash && \
+# Install unzip (required for Bun installer) and Bun
+RUN yum update -y && yum install -y unzip && \
+    curl -fsSL https://bun.sh/install | bash && \
     ln -s /root/.bun/bin/bun /usr/local/bin/bun
 
 # Copy only package files first (for better caching)
@@ -14,8 +15,9 @@ RUN bun install --frozen-lockfile
 FROM public.ecr.aws/lambda/nodejs:18-x86_64 AS builder
 WORKDIR /app
 
-# Install Bun
-RUN curl -fsSL https://bun.sh/install | bash && \
+# Install unzip (required for Bun installer) and Bun
+RUN yum update -y && yum install -y unzip && \
+    curl -fsSL https://bun.sh/install | bash && \
     ln -s /root/.bun/bin/bun /usr/local/bin/bun
 
 # Accept DATABASE_URL as build argument
@@ -33,8 +35,9 @@ RUN bun run build
 FROM public.ecr.aws/lambda/nodejs:18-x86_64 AS runner
 WORKDIR /app
 
-# Install Bun
-RUN curl -fsSL https://bun.sh/install | bash && \
+# Install unzip (required for Bun installer) and Bun
+RUN yum update -y && yum install -y unzip && \
+    curl -fsSL https://bun.sh/install | bash && \
     ln -s /root/.bun/bin/bun /usr/local/bin/bun
 
 ENV NODE_ENV=production
