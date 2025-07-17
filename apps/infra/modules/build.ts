@@ -114,11 +114,7 @@ export function createBuildSystem(config: CommonConfig, network: NetworkOutputs,
           value: "pathfinder",
           type: "PLAINTEXT",
         },
-        {
-          name: "DATABASE_URL",
-          value: database.connectionString,
-          type: "PLAINTEXT",
-        },
+        // DATABASE_URL not needed - migrations run separately
         {
           name: "ECR_REPOSITORY_URI",
           value: container.repositoryUrl,
@@ -146,11 +142,7 @@ export function createBuildSystem(config: CommonConfig, network: NetworkOutputs,
         },
             ],
     },
-    vpcConfig: {
-      vpcId: network.vpcId,
-      subnets: network.privateSubnetIds,  // PRIVATE subnets (not public)
-      securityGroupIds: [network.securityGroups.codeBuild],
-    },
+    // No VPC config needed - build process doesn't access database
     source: {
       type: "GITHUB",
       location: `https://github.com/${config.githubOrg}/${config.githubRepo}.git`,

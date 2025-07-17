@@ -28,27 +28,14 @@ phases:
       - echo "=== End Environment Debug ==="
       - echo "PHASE 1 - Installing dependencies"
       - /root/.bun/bin/bun install --frozen-lockfile
-      - echo "PHASE 2 - Testing database connectivity"
-      - echo "Testing DNS resolution for database..."
-      - DB_HOST=$(echo "$DATABASE_URL" | sed 's/.*@\([^@]*\).*/\1/' | cut -d':' -f1)
-      - echo "Database host is $DB_HOST"
-      - nslookup $DB_HOST || echo "DNS resolution failed"
-      - echo "Testing network connectivity..."
-      - telnet $DB_HOST 5432 || echo "Connection test failed"
-      - echo "PHASE 3 - Fix DATABASE_URL to use IP instead of hostname"
-      - DB_IP=$(nslookup $DB_HOST | grep "Address:" | tail -1 | awk '{print $2}')
-      - echo "Database IP is $DB_IP"
-      - export DATABASE_URL=$(echo "$DATABASE_URL" | sed "s/$DB_HOST/$DB_IP/")
-      - echo "PHASE 4 - Running database migrations with IP"
-      - /root/.bun/bin/bun run scripts/run-migrations.ts
-      - echo "PHASE 5 - Building migration image (for consistency)"
+      - echo "PHASE 2 - Building migration image"
       - docker build -f Dockerfile.migration -t $IMAGE_REPO_NAME:migration-$IMAGE_TAG .
       - docker tag $IMAGE_REPO_NAME:migration-$IMAGE_TAG $REPOSITORY_URI:migration-$IMAGE_TAG
       - docker tag $IMAGE_REPO_NAME:migration-$IMAGE_TAG $REPOSITORY_URI:migration-latest
       - docker push $REPOSITORY_URI:migration-$IMAGE_TAG
       - docker push $REPOSITORY_URI:migration-latest
-      - echo "PHASE 6 - Building main app image with database access"
-      - docker build --build-arg DATABASE_URL=$DATABASE_URL -t $IMAGE_REPO_NAME:$IMAGE_TAG .
+      - echo "PHASE 3 - Building main app image"
+      - docker build -t $IMAGE_REPO_NAME:$IMAGE_TAG .
       - docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $REPOSITORY_URI:$IMAGE_TAG
       - docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $REPOSITORY_URI:latest
 
