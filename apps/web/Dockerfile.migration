@@ -1,13 +1,13 @@
 # Lightweight migration-only Docker image
-FROM oven/bun:1.2.18-alpine
+FROM node:18-alpine
 
 WORKDIR /app
 
 # Copy package files first for better caching
-COPY package.json bun.lock* ./
+COPY package.json ./
 
-# Install all dependencies (including dev deps like tsx if needed)
-RUN bun install --frozen-lockfile
+# Install dependencies using npm (since we're using Node.js now)
+RUN npm ci --production=false
 
 # Copy the entire src directory to avoid import path issues
 COPY src/ ./src/
@@ -25,5 +25,5 @@ RUN echo "=== Directory structure ===" && \
 # Set environment for better error reporting
 ENV NODE_ENV=production
 
-# Default command runs migrations with verbose output
-CMD ["sh", "-c", "echo 'Starting migration container...' && bun run scripts/run-migrations.ts"] 
+# Default command runs migrations with verbose output - use tsx since we're on Node.js
+CMD ["sh", "-c", "echo 'Starting migration container...' && npx tsx scripts/run-migrations.ts"] 
