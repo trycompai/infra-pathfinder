@@ -67,46 +67,17 @@ migration_build_id=$(aws codebuild start-build \
 echo "Migration build ID: $migration_build_id"
 wait_for_build "$migration_build_id" "Migration"
 
-# Step 3: Run Database Migrations
-echo -e "${YELLOW}🗃️  Step 3: Running database migrations...${NC}"
+# Step 3: Run Database Migrations via CodeBuild
+echo -e "${YELLOW}🗃️  Step 3: Running database migrations via CodeBuild...${NC}"
 
-# Get subnet and security group for migration task
-private_subnet=$(aws ec2 describe-subnets \
-    --filters "Name=tag:Type,Values=private" \
-    --query 'Subnets[0].SubnetId' --output text)
+# Run migration via CodeBuild (which has VPC access to database)
+migration_run_id=$(aws codebuild start-build \
+    --project-name pathfinder-migration-build \
+    --environment-variables-override name=RUN_MIGRATIONS,value=true \
+    --query 'build.id' --output text)
 
-codebuild_sg=$(aws ec2 describe-security-groups \
-    --filters "Name=tag:Name,Values=pathfinder-codebuild-sg" \
-    --query 'SecurityGroups[0].GroupId' --output text)
-
-echo "Using subnet: $private_subnet"
-echo "Using security group: $codebuild_sg"
-
-# Run migration task with correct syntax
-migration_task_arn=$(aws ecs run-task \
-    --cluster "$CLUSTER_NAME" \
-    --task-definition pathfinder-migration:latest \
-    --launch-type FARGATE \
-    --network-configuration "awsvpcConfiguration={subnets=[$private_subnet],securityGroups=[$codebuild_sg],assignPublicIp=ENABLED}" \
-    --query 'tasks[0].taskArn' --output text)
-
-echo "Migration task ARN: $migration_task_arn"
-
-# Wait for migration to complete
-echo -e "${YELLOW}⏳ Waiting for migrations to complete...${NC}"
-aws ecs wait tasks-stopped --cluster "$CLUSTER_NAME" --tasks "$migration_task_arn"
-
-# Check migration exit code
-exit_code=$(aws ecs describe-tasks \
-    --cluster "$CLUSTER_NAME" \
-    --tasks "$migration_task_arn" \
-    --query 'tasks[0].containers[0].exitCode' --output text)
-
-if [ "$exit_code" != "0" ]; then
-    echo -e "${RED}❌ Migration failed with exit code: $exit_code${NC}"
-    exit 1
-fi
-echo -e "${GREEN}✅ Migrations completed successfully${NC}"
+echo "Migration run ID: $migration_run_id"
+wait_for_build "$migration_run_id" "Migration Run"
 
 # Step 4: Build Application Image
 echo -e "${YELLOW}🔨 Step 4: Building application image...${NC}"

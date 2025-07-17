@@ -78,31 +78,24 @@ jobs:
           
       - name: Run database migrations
         run: |
-          # Get subnet and security group for migration task
-          PRIVATE_SUBNET=$(aws ec2 describe-subnets --filters "Name=tag:Type,Values=private" --query 'Subnets[0].SubnetId' --output text)
-          CODEBUILD_SG=$(aws ec2 describe-security-groups --filters "Name=tag:Name,Values=pathfinder-codebuild-sg" --query 'SecurityGroups[0].GroupId' --output text)
+          # Run migrations via CodeBuild (which has VPC access to database)
+          MIGRATION_RUN_ID=$(aws codebuild start-build \
+            --project-name pathfinder-migration-build \
+            --environment-variables-override name=RUN_MIGRATIONS,value=true \
+            --query 'build.id' --output text)
           
-          echo "Using subnet: $PRIVATE_SUBNET"
-          echo "Using security group: $CODEBUILD_SG"
+          echo "Migration run started: $MIGRATION_RUN_ID"
           
-          TASK_ARN=$(aws ecs run-task \
-            --cluster pathfinder \
-            --task-definition pathfinder-migration:latest \
-            --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[$PRIVATE_SUBNET],securityGroups=[$CODEBUILD_SG],assignPublicIp=ENABLED}" \
-            --query 'tasks[0].taskArn' --output text)
-          
-          echo "Migration task started: $TASK_ARN"
-          
-          # Wait for migration task to complete
-          aws ecs wait tasks-stopped --cluster pathfinder --tasks $TASK_ARN
+          # Wait for migration run to complete
+          while [ "$(aws codebuild batch-get-builds --ids $MIGRATION_RUN_ID --query 'builds[0].buildStatus' --output text)" = "IN_PROGRESS" ]; do
+            echo "Waiting for migrations to complete..."
+            sleep 30
+          done
           
           # Check if migration succeeded
-          EXIT_CODE=$(aws ecs describe-tasks --cluster pathfinder --tasks $TASK_ARN \
-            --query 'tasks[0].containers[0].exitCode' --output text)
-          
-          if [ "$EXIT_CODE" != "0" ]; then
-            echo "Migration failed with exit code: $EXIT_CODE"
+          STATUS=$(aws codebuild batch-get-builds --ids $MIGRATION_RUN_ID --query 'builds[0].buildStatus' --output text)
+          if [ "$STATUS" != "SUCCEEDED" ]; then
+            echo "Migration failed with status: $STATUS"
             exit 1
           fi
           echo "Migrations completed successfully"

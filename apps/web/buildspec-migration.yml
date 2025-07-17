@@ -17,6 +17,15 @@ phases:
       - docker build -f Dockerfile.migration -t $IMAGE_REPO_NAME:migration-$IMAGE_TAG .
       - docker tag $IMAGE_REPO_NAME:migration-$IMAGE_TAG $REPOSITORY_URI:migration-$IMAGE_TAG
       - docker tag $IMAGE_REPO_NAME:migration-$IMAGE_TAG $REPOSITORY_URI:migration-latest
+      - |
+        if [ "$RUN_MIGRATIONS" = "true" ]; then
+          echo "Running database migrations..."
+          docker run --rm \
+            -e DATABASE_URL="$DATABASE_URL" \
+            -e NODE_ENV="production" \
+            $IMAGE_REPO_NAME:migration-$IMAGE_TAG
+          echo "Migrations completed successfully"
+        fi
 
   post_build:
     commands:

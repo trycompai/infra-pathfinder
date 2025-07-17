@@ -165,10 +165,10 @@ export function createBuildSystem(config: CommonConfig, network: NetworkOutputs,
     },
   });
 
-  // CodeBuild project for building migration image (no database access needed)
+  // CodeBuild project for building migration image (with database access for running migrations)
   const migrationProject = new aws.codebuild.Project("pathfinder-migration-build", {
     name: "pathfinder-migration-build",
-    description: "Build migration Docker image (standalone)",
+    description: "Build migration Docker image and run migrations",
     serviceRole: codebuildRole.arn,
     artifacts: {
       type: "NO_ARTIFACTS",
@@ -190,13 +190,23 @@ export function createBuildSystem(config: CommonConfig, network: NetworkOutputs,
           type: "PLAINTEXT",
         },
         {
+          name: "DATABASE_URL",
+          value: database.connectionString,
+          type: "PLAINTEXT",
+        },
+        {
           name: "AWS_DEFAULT_REGION",
           value: config.awsRegion,
           type: "PLAINTEXT",
         },
       ],
     },
-    // No VPC config - doesn't need database access
+    // Add VPC config for database access
+    vpcConfig: {
+      vpcId: network.vpcId,
+      subnets: network.privateSubnetIds,
+      securityGroupIds: [network.securityGroups.codeBuild],
+    },
     source: {
       type: "GITHUB",
       location: `https://github.com/${config.githubOrg}/${config.githubRepo}.git`,
