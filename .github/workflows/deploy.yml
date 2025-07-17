@@ -78,11 +78,18 @@ jobs:
           
       - name: Run database migrations
         run: |
+          # Get subnet and security group for migration task
+          PRIVATE_SUBNET=$(aws ec2 describe-subnets --filters "Name=tag:Type,Values=private" --query 'Subnets[0].SubnetId' --output text)
+          CODEBUILD_SG=$(aws ec2 describe-security-groups --filters "Name=tag:Name,Values=pathfinder-codebuild-sg" --query 'SecurityGroups[0].GroupId' --output text)
+          
+          echo "Using subnet: $PRIVATE_SUBNET"
+          echo "Using security group: $CODEBUILD_SG"
+          
           TASK_ARN=$(aws ecs run-task \
             --cluster pathfinder \
             --task-definition pathfinder-migration:latest \
-            --subnets $(aws ec2 describe-subnets --filters "Name=tag:Type,Values=private" --query 'Subnets[0].SubnetId' --output text) \
-            --security-groups $(aws ec2 describe-security-groups --filters "Name=tag:Name,Values=pathfinder-codebuild-sg" --query 'SecurityGroups[0].GroupId' --output text) \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[$PRIVATE_SUBNET],securityGroups=[$CODEBUILD_SG],assignPublicIp=ENABLED}" \
             --query 'tasks[0].taskArn' --output text)
           
           echo "Migration task started: $TASK_ARN"
@@ -122,6 +129,10 @@ jobs:
           
       - name: Deploy application
         run: |
+          # Wait for ECR to process the new image
+          echo "Waiting for ECR to process new image..."
+          sleep 30
+          
           # Update ECS service to use new image
           aws ecs update-service \
             --cluster pathfinder \

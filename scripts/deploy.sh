@@ -79,12 +79,15 @@ codebuild_sg=$(aws ec2 describe-security-groups \
     --filters "Name=tag:Name,Values=pathfinder-codebuild-sg" \
     --query 'SecurityGroups[0].GroupId' --output text)
 
-# Run migration task
+echo "Using subnet: $private_subnet"
+echo "Using security group: $codebuild_sg"
+
+# Run migration task with correct syntax
 migration_task_arn=$(aws ecs run-task \
     --cluster "$CLUSTER_NAME" \
     --task-definition pathfinder-migration:latest \
-    --subnets "$private_subnet" \
-    --security-groups "$codebuild_sg" \
+    --launch-type FARGATE \
+    --network-configuration "awsvpcConfiguration={subnets=[$private_subnet],securityGroups=[$codebuild_sg],assignPublicIp=ENABLED}" \
     --query 'tasks[0].taskArn' --output text)
 
 echo "Migration task ARN: $migration_task_arn"
@@ -116,6 +119,10 @@ wait_for_build "$app_build_id" "Application"
 
 # Step 5: Deploy Application
 echo -e "${YELLOW}🚢 Step 5: Deploying application...${NC}"
+
+# Wait for ECR to process the new image
+echo -e "${YELLOW}⏳ Waiting for ECR to process new image...${NC}"
+sleep 30
 
 # Update ECS service
 aws ecs update-service \
