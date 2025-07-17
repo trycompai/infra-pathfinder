@@ -42,9 +42,9 @@ phases:
       - echo "Updating ECS service to deploy new image..."
       - aws ecs update-service --cluster $ECS_CLUSTER_NAME --service $ECS_SERVICE_NAME --force-new-deployment
       - echo "Writing image definitions file..."
-      - printf '[{"name":"pathfinder-app","imageUri":"%s"}]' $REPOSITORY_URI:$IMAGE_TAG > imagedefinitions.json
+      - 'printf "[{\"name\":\"pathfinder-app\",\"imageUri\":\"%s\"}]" $REPOSITORY_URI:$IMAGE_TAG > imagedefinitions.json'
 
 artifacts:
   files:
     - imagedefinitions.json
-  name: pathfinder-build-$(date +%Y-%m-%d)
+  name: pathfinder-build
