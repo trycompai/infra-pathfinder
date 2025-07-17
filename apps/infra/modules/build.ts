@@ -139,7 +139,7 @@ export function createBuildSystem(config: CommonConfig, network: NetworkOutputs,
         },
         {
           name: "NODE_ENV",
-          value: config.environment,
+          value: process.env.NODE_ENV || "production",
           type: "PLAINTEXT",
         },
       ],
