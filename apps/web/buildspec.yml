@@ -47,4 +47,4 @@ phases:
 artifacts:
   files:
     - imagedefinitions.json
-  name: pathfinder-build-$(date +%Y-%m-%d) 
+  name: pathfinder-build-$(date +%Y-%m-%d)
