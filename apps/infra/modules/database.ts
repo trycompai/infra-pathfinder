@@ -6,11 +6,15 @@ import { CommonConfig, NetworkOutputs } from "../types";
 export function createDatabase(config: CommonConfig, network: NetworkOutputs) {
   const { commonTags } = config;
 
-  // Generate a secure random password for the database
+  // Generate a secure random password for the database (hexadecimal only - no special chars)
   const dbPassword = new random.RandomPassword("pathfinder-db-password", {
     length: 32,
-    special: true,
-    overrideSpecial: "!#$%&*()-_=+[]{}<>:?",
+    special: false,
+    upper: false,
+    lower: false,
+    numeric: false,
+    // Use only hexadecimal characters (0-9, a-f)
+    overrideSpecial: "0123456789abcdef",
   });
 
   // Create AWS Secret for database credentials (will be populated after RDS instance is created)

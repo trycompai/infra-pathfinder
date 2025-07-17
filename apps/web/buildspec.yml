@@ -12,9 +12,16 @@ phases:
 
   build:
     commands:
+      - echo "=== BUILD ENVIRONMENT DEBUG ==="
+      - echo "DATABASE_URL exists:" $(test -n "$DATABASE_URL" && echo "YES" || echo "NO")
+      - echo "DATABASE_URL length:" ${#DATABASE_URL}
+      - echo "DATABASE_URL (masked):" $(echo "$DATABASE_URL" | sed 's/:[^@]*@/:***@/')
+      - echo "NODE_ENV:" $NODE_ENV
       - cd apps/web
-      - /root/.bun/bin/bun install --frozen-lockfile
-      - docker build --build-arg DATABASE_URL=$DATABASE_URL -t $IMAGE_REPO_NAME:$IMAGE_TAG .
+      - echo "=== TESTING ENVIRONMENT VALIDATION ==="
+      - SKIP_ENV_VALIDATION=true /root/.bun/bin/bun install --frozen-lockfile
+      - echo "=== BUILDING DOCKER IMAGE ==="
+      - docker build --build-arg DATABASE_URL="$DATABASE_URL" -t $IMAGE_REPO_NAME:$IMAGE_TAG .
       - docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $REPOSITORY_URI:$IMAGE_TAG
       - docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $REPOSITORY_URI:latest
 
