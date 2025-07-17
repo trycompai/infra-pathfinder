@@ -37,13 +37,7 @@ phases:
       - telnet $DB_HOST 5432 || echo "Connection test failed"
       - echo "PHASE 3 - Testing Node.js database connection"
       - echo "Testing with Node.js pg client..."
-      - /root/.bun/bin/bun -e "
-          const { Pool } = require('pg');
-          const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-          pool.connect()
-            .then(client => { console.log('✅ Node.js connection SUCCESS'); client.release(); })
-            .catch(err => console.log('❌ Node.js connection FAILED:', err.message));
-        "
+      - /root/.bun/bin/bun -e "const { Pool } = require('pg'); const pool = new Pool({ connectionString: process.env.DATABASE_URL }); pool.connect().then(client => { console.log('✅ Node.js connection SUCCESS'); client.release(); }).catch(err => console.log('❌ Node.js connection FAILED - ', err.message));"
       - echo "PHASE 4 - Running database migrations directly"
       - echo "Running migrations with DATABASE_URL (masked for security)"
       - /root/.bun/bin/bun run scripts/run-migrations.ts
