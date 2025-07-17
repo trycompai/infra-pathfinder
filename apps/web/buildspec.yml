@@ -21,6 +21,11 @@ phases:
     commands:
       - echo "Build started on $(date)"
       - cd apps/web
+      - echo "=== Environment Debug ==="
+      - echo "NODE_ENV is $NODE_ENV"
+      - echo "DATABASE_URL format check (masked):"
+      - echo "$DATABASE_URL" | sed 's/:[^:]*@/:***@/' | sed 's/\/\/[^@]*@/\/\/***@/'
+      - echo "=== End Environment Debug ==="
       - echo "PHASE 1 - Installing dependencies"
       - /root/.bun/bin/bun install --frozen-lockfile
       - echo "PHASE 2 - Running database migrations directly"
