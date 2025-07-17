@@ -3,11 +3,15 @@ FROM public.ecr.aws/lambda/nodejs:18-x86_64
 
 WORKDIR /app
 
-# Copy package files first for better caching
-COPY package.json ./
+# Install Bun (same package manager as main app)
+RUN curl -fsSL https://bun.sh/install | bash && \
+    ln -s /root/.bun/bin/bun /usr/local/bin/bun
 
-# Install dependencies using npm install (no package-lock.json available)
-RUN npm install --production=false
+# Copy package files first for better caching (including bun.lock)
+COPY package.json bun.lock* ./
+
+# Install dependencies using Bun (same as main app, uses bun.lock)
+RUN bun install --frozen-lockfile
 
 # Copy the entire src directory to avoid import path issues
 COPY src/ ./src/
@@ -25,5 +29,5 @@ RUN echo "=== Directory structure ===" && \
 # Set environment for better error reporting
 ENV NODE_ENV=production
 
-# Default command runs migrations with verbose output using npx tsx
-CMD ["sh", "-c", "echo 'Starting migration container...' && npx tsx scripts/run-migrations.ts"] 
+# Default command runs migrations with verbose output using Bun
+CMD ["sh", "-c", "echo 'Starting migration container...' && bun run scripts/run-migrations.ts"] 
