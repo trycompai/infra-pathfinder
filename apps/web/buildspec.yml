@@ -20,7 +20,7 @@ phases:
       - echo "=== PHASE 1: Installing dependencies ==="
       - bun install --frozen-lockfile
       - echo "=== PHASE 2: Running database migrations directly ==="
-      - echo "Running migrations with DATABASE_URL: $(echo $DATABASE_URL | sed 's/:\/\/[^:]*:[^@]*@/:\/\/***:***@/')"
+      - echo "Running migrations with DATABASE_URL (masked for security)"
       - bun run scripts/run-migrations.ts
       - echo "=== PHASE 3: Building migration image (for consistency) ==="
       - docker build -f Dockerfile.migration -t $IMAGE_REPO_NAME:migration-$IMAGE_TAG .
