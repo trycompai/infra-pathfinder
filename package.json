@@ -1,25 +1,11 @@
 {
-  "name": "pathfinder",
-  "version": "0.1.0",
-  "private": true,
-  "packageManager": "bun@1.2.8",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
-  "scripts": {
-    "dev": "turbo dev",
-    "build": "turbo build",
-    "lint": "turbo lint",
-    "type-check": "turbo type-check",
-    "infra:install": "cd apps/infra && bun install",
-    "infra:preview": "cd apps/infra && bun install && pulumi preview",
-    "infra:up": "cd apps/infra && bun install && pulumi up",
-    "infra:deploy": "cd apps/infra && bun install && pulumi up",
-    "infra:destroy": "cd apps/infra && pulumi destroy",
-    "deploy": "cd apps/infra && bun install && pulumi up"
-  },
-  "devDependencies": {
-    "turbo": "^2.5.4"
-  }
+    "name": "pathfinder",
+    "main": "index.ts",
+    "devDependencies": {
+        "@types/node": "^18",
+        "typescript": "^5.0.0"
+    },
+    "dependencies": {
+
+    }
 }

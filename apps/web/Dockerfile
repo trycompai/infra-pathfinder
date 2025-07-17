@@ -10,20 +10,45 @@ RUN bun install --frozen-lockfile
 FROM oven/bun:1.2.18-alpine AS builder
 WORKDIR /app
 
-# Accept DATABASE_URL as build argument
-ARG DATABASE_URL
-ENV DATABASE_URL=$DATABASE_URL
+# Install AWS RDS certificates for proper SSL verification
+RUN apk add --no-cache curl && \
+    curl -o /tmp/global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem && \
+    mkdir -p /usr/local/share/ca-certificates && \
+    cp /tmp/global-bundle.pem /usr/local/share/ca-certificates/rds-ca-bundle.crt && \
+    update-ca-certificates
+
+# Accept database connection parameters as build arguments
+ARG PGHOST
+ARG PGPORT
+ARG PGDATABASE
+ARG PGUSER
+ARG PGPASSWORD
+ARG PGSSLMODE
 
 # Copy dependencies from previous stage
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Build the application
-RUN bun run build
+# Build the application with properly constructed DATABASE_URL (SSL with proper certs)
+RUN export DATABASE_URL="postgresql://${PGUSER}:${PGPASSWORD}@${PGHOST}:${PGPORT}/${PGDATABASE}?sslmode=require" && \
+    export NODE_ENV="production" && \
+    echo "Building with DATABASE_URL: postgresql://${PGUSER}:***@${PGHOST}:${PGPORT}/${PGDATABASE}" && \
+    echo "🧪 Testing database connection before build..." && \
+    node test-build-connection.js && \
+    echo "🚀 Starting Next.js build..." && \
+    bun run build
 
 # Stage 3: Runner
 FROM oven/bun:1.2.18-alpine AS runner
 WORKDIR /app
+
+# Install AWS RDS certificates for runtime SSL connections
+RUN apk add --no-cache curl && \
+    curl -o /tmp/global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem && \
+    mkdir -p /usr/local/share/ca-certificates && \
+    cp /tmp/global-bundle.pem /usr/local/share/ca-certificates/rds-ca-bundle.crt && \
+    update-ca-certificates && \
+    rm -rf /tmp/global-bundle.pem
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

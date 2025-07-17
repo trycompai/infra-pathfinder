@@ -16,17 +16,19 @@ phases:
   build:
     commands:
       - echo "Build started on $(date)"
-      - echo "=== PHASE 1: Building and pushing migration image ==="
       - cd apps/web
+      - echo "=== PHASE 1: Installing dependencies ==="
+      - bun install --frozen-lockfile
+      - echo "=== PHASE 2: Running database migrations directly ==="
+      - echo "Running migrations with DATABASE_URL: $(echo $DATABASE_URL | sed 's/:\/\/[^:]*:[^@]*@/:\/\/***:***@/')"
+      - bun run scripts/run-migrations.ts
+      - echo "=== PHASE 3: Building migration image (for consistency) ==="
       - docker build -f Dockerfile.migration -t $IMAGE_REPO_NAME:migration-$IMAGE_TAG .
       - docker tag $IMAGE_REPO_NAME:migration-$IMAGE_TAG $REPOSITORY_URI:migration-$IMAGE_TAG
       - docker tag $IMAGE_REPO_NAME:migration-$IMAGE_TAG $REPOSITORY_URI:migration-latest
       - docker push $REPOSITORY_URI:migration-$IMAGE_TAG
       - docker push $REPOSITORY_URI:migration-latest
-      - echo "=== PHASE 2: Running database migrations ==="
-      - chmod +x run-migration.sh
-      - ./run-migration.sh
-      - echo "=== PHASE 3: Building main app image with database access ==="
+      - echo "=== PHASE 4: Building main app image with database access ==="
       - docker build --build-arg DATABASE_URL=$DATABASE_URL -t $IMAGE_REPO_NAME:$IMAGE_TAG .
       - docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $REPOSITORY_URI:$IMAGE_TAG
       - docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $REPOSITORY_URI:latest
@@ -37,6 +39,8 @@ phases:
       - echo "Pushing the Docker images..."
       - docker push $REPOSITORY_URI:$IMAGE_TAG
       - docker push $REPOSITORY_URI:latest
+      - echo "Updating ECS service to deploy new image..."
+      - aws ecs update-service --cluster $ECS_CLUSTER_NAME --service $ECS_SERVICE_NAME --force-new-deployment
       - echo "Writing image definitions file..."
       - printf '[{"name":"pathfinder-app","imageUri":"%s"}]' $REPOSITORY_URI:$IMAGE_TAG > imagedefinitions.json
 

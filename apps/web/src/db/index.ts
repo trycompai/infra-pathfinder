@@ -7,7 +7,7 @@ import * as schema from "./schema";
 // Create a connection pool using validated environment variables
 const pool = new Pool({
   connectionString: env.DATABASE_URL,
-  // Use AWS RDS CA bundle for proper SSL verification
+  // Use AWS CA bundle for SSL verification (we have proper certs in Docker)
   ssl: awsCaBundle,
 });
 

@@ -1,7 +1,12 @@
 import * as aws from "@pulumi/aws";
 import * as awsx from "@pulumi/awsx";
+import * as command from "@pulumi/command";
 import * as pulumi from "@pulumi/pulumi";
 import * as random from "@pulumi/random";
+import * as dotenv from "dotenv";
+
+// Load environment variables from .env file
+dotenv.config();
 
 // ==========================================
 // CONFIGURATION & SHARED SETTINGS
@@ -85,7 +90,7 @@ const serviceSecurityGroup = new aws.ec2.SecurityGroup(
   }
 );
 
-// Database Security Group - only allow access from the service
+// Database Security Group - allow public access since DB is publicly accessible
 const dbSecurityGroup = new aws.ec2.SecurityGroup("pathfinder-db-sg", {
   vpcId: vpc.vpcId,
   ingress: [
@@ -93,7 +98,8 @@ const dbSecurityGroup = new aws.ec2.SecurityGroup("pathfinder-db-sg", {
       protocol: "tcp",
       fromPort: 5432,
       toPort: 5432,
-      securityGroups: [serviceSecurityGroup.id], // Only allow from ECS service
+      cidrBlocks: ["0.0.0.0/0"], // Allow from anywhere - database is publicly accessible
+      description: "Allow PostgreSQL access from anywhere (public database)",
     },
   ],
   egress: [
@@ -111,14 +117,18 @@ const dbSecurityGroup = new aws.ec2.SecurityGroup("pathfinder-db-sg", {
   },
 });
 
+// No complex security groups needed with public database!
+
+// Database is publicly accessible - no additional rules needed!
+
 // ==========================================
 // DATABASE LAYER
 // RDS PostgreSQL with auto-scaling storage
 // ==========================================
 
-// RDS Subnet Group - database should be in private subnets
+// RDS Subnet Group - keep in private subnets (can't change while DB is running)
 const dbSubnetGroup = new aws.rds.SubnetGroup("pathfinder-db-subnet-group", {
-  subnetIds: vpc.privateSubnetIds,
+  subnetIds: vpc.privateSubnetIds, // Keep in private subnets for now
   tags: {
     ...commonTags,
     Name: "pathfinder-db-subnet-group",
@@ -132,7 +142,7 @@ const dbPassword = new random.RandomPassword("pathfinder-db-password-v2", {
   overrideSpecial: "!#$%&*()-_=+[]{}<>:?", // RDS doesn't allow: / @ " space
 });
 
-// RDS PostgreSQL Instance
+// RDS PostgreSQL Instance - publicly accessible for simplicity
 const db = new aws.rds.Instance("pathfinder-db", {
   engine: "postgres",
   engineVersion: "15.13", // Updated to latest available version
@@ -146,6 +156,13 @@ const db = new aws.rds.Instance("pathfinder-db", {
   password: dbPassword.result, // Use the generated secure password
   vpcSecurityGroupIds: [dbSecurityGroup.id],
   dbSubnetGroupName: dbSubnetGroup.name,
+  
+  // Make database publicly accessible - this solves SSG build issues!
+  publiclyAccessible: true,
+  
+  // Use default parameter group (requires SSL - AWS best practice)
+  applyImmediately: true, // Apply parameter changes immediately (requires restart)
+  
   skipFinalSnapshot: true, // For dev - set to false in production
   deletionProtection: false, // For dev - set to true in production
   backupRetentionPeriod: 7, // Keep backups for 7 days
@@ -286,18 +303,18 @@ const logGroup = new aws.cloudwatch.LogGroup("pathfinder-logs", {
 
 // ECS needs this role to pull images and write logs
 const executionRole = new aws.iam.Role("pathfinder-execution-role", {
-  assumeRolePolicy: JSON.stringify({
-    Version: "2012-10-17",
-    Statement: [
+  assumeRolePolicy: `{
+    "Version": "2012-10-17",
+    "Statement": [
       {
-        Action: "sts:AssumeRole",
-        Effect: "Allow",
-        Principal: {
-          Service: "ecs-tasks.amazonaws.com",
-        },
-      },
-    ],
-  }),
+        "Action": "sts:AssumeRole",
+        "Effect": "Allow",
+        "Principal": {
+          "Service": "ecs-tasks.amazonaws.com"
+        }
+      }
+    ]
+  }`,
 });
 
 new aws.iam.RolePolicyAttachment("pathfinder-execution-role-policy", {
@@ -305,6 +322,8 @@ new aws.iam.RolePolicyAttachment("pathfinder-execution-role-policy", {
   policyArn:
     "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
 });
+
+// No CodeBuild needed - building locally with Pulumi!
 
 // ECR for storing Docker images
 const repo = new awsx.ecr.Repository("pathfinder-repo", {
@@ -316,14 +335,49 @@ const repo = new awsx.ecr.Repository("pathfinder-repo", {
   },
 });
 
-// Always build Docker image locally and push to ECR
-const imageUri = new awsx.ecr.Image("pathfinder-image", {
+// Build image directly in Pulumi with unique tag - this automatically triggers ECS restart
+const appImage = new awsx.ecr.Image("pathfinder-app-image", {
+  repositoryUrl: repo.url,
+  context: "../web", // Build from web directory
+  platform: "linux/amd64",
+  // Pass database URL for build-time SSG
+  args: {
+    DATABASE_URL: pulumi.interpolate`postgresql://${db.username}:${dbPassword.result}@${db.endpoint}/${db.dbName}`,
+  },
+});
+
+// Migration image for running database migrations
+const migrationImage = new awsx.ecr.Image("pathfinder-migration-image", {
   repositoryUrl: repo.url,
   context: "../web",
-  platform: "linux/amd64", // Required for AWS Fargate
-}).imageUri;
+  platform: "linux/amd64", 
+  dockerfile: "../web/Dockerfile.migration",
+});
 
-// Fargate Service with init container for migrations
+// Run migrations as a one-time task during deployment
+const runMigrations = new command.local.Command("run-migrations", {
+  create: pulumi.interpolate`
+    echo "🚀 Running database migrations..."
+    
+    # Run migration container locally with database access
+    docker run --rm \
+      -e DATABASE_URL="postgresql://${db.username}:${dbPassword.result}@${db.endpoint}/${db.dbName}" \
+      ${migrationImage.imageUri} \
+      bun run scripts/run-migrations.ts
+    
+    echo "✅ Database migrations completed"
+  `,
+}, {
+  dependsOn: [migrationImage, db]
+});
+
+// Simple, clean architecture - no complex build processes!
+
+// Phase 2: Reference app image (built directly by Pulumi)
+// Unique image URI automatically triggers ECS restart - no manual intervention needed!
+const imageUri = appImage.imageUri;
+
+// Fargate Service (migrations already completed during deployment)
 const service = new awsx.ecs.FargateService("pathfinder-service", {
   cluster: cluster.arn,
   networkConfiguration: {
@@ -337,43 +391,13 @@ const service = new awsx.ecs.FargateService("pathfinder-service", {
       roleArn: executionRole.arn,
     },
     containers: {
-      // Init container that runs migrations first
-      "migration-runner": {
-        name: "migration-runner",
-        image: imageUri,
-        cpu: 256, // 0.25 vCPU
-        memory: 512, // 512MB - enough for migrations
-        essential: false, // This container can exit after migrations complete
-        environment: [
-          {
-            name: "DATABASE_URL",
-            value: pulumi.interpolate`postgresql://${db.username}:${db.password}@${db.endpoint}/${db.dbName}`,
-          },
-        ],
-        command: ["bun", "run", "scripts/run-migrations.ts"],
-        workingDirectory: "/app",
-        logConfiguration: {
-          logDriver: "awslogs",
-          options: {
-            "awslogs-group": logGroup.name,
-            "awslogs-region": aws.config.region,
-            "awslogs-stream-prefix": "pathfinder-migrations",
-          },
-        },
-      },
-      // Main application container
+      // Main application container (migrations already completed)
       "pathfinder-app": {
         name: "pathfinder-app",
         image: imageUri,
         cpu: 1024, // 1 vCPU
         memory: 2048, // 2GB
         essential: true,
-        dependsOn: [
-          {
-            containerName: "migration-runner",
-            condition: "SUCCESS", // Wait for migrations to complete successfully
-          },
-        ],
         environment: [
           {
             name: "HOSTNAME",
@@ -383,10 +407,10 @@ const service = new awsx.ecs.FargateService("pathfinder-service", {
             name: "PORT",
             value: "3000",
           },
-          {
-            name: "DATABASE_URL",
-            value: pulumi.interpolate`postgresql://${db.username}:${db.password}@${db.endpoint}/${db.dbName}`,
-          },
+                  {
+          name: "DATABASE_URL",
+          value: pulumi.interpolate`postgresql://${db.username}:${db.password}@${db.endpoint}/${db.dbName}`,
+        },
           {
             name: "ENABLE_DEBUG_ENDPOINTS",
             value: "true", // Temporary: for debugging environment variables
@@ -409,7 +433,11 @@ const service = new awsx.ecs.FargateService("pathfinder-service", {
       },
     },
   },
+}, {
+  dependsOn: [runMigrations] // Wait for migrations to complete before starting the app
 });
+
+// No Tailscale proxy needed - database is publicly accessible!
 
 // ==========================================
 // AUTO-SCALING CONFIGURATION
@@ -525,18 +553,18 @@ const albResponseTimeAlarm = new aws.cloudwatch.MetricAlarm(
 const betterStackLambdaRole = new aws.iam.Role(
   "pathfinder-better-stack-lambda-role",
   {
-    assumeRolePolicy: JSON.stringify({
-      Version: "2012-10-17",
-      Statement: [
+    assumeRolePolicy: `{
+      "Version": "2012-10-17",
+      "Statement": [
         {
-          Action: "sts:AssumeRole",
-          Effect: "Allow",
-          Principal: {
-            Service: "lambda.amazonaws.com",
-          },
-        },
-      ],
-    }),
+          "Action": "sts:AssumeRole",
+          "Effect": "Allow",
+          "Principal": {
+            "Service": "lambda.amazonaws.com"
+          }
+        }
+      ]
+    }`,
     tags: {
       ...commonTags,
       Name: "pathfinder-better-stack-lambda-role",
@@ -559,20 +587,20 @@ new aws.iam.RolePolicyAttachment(
 const betterStackLambdaPolicy = new aws.iam.Policy(
   "pathfinder-better-stack-lambda-policy",
   {
-    policy: JSON.stringify({
-      Version: "2012-10-17",
-      Statement: [
+    policy: `{
+      "Version": "2012-10-17",
+      "Statement": [
         {
-          Effect: "Allow",
-          Action: [
+          "Effect": "Allow",
+          "Action": [
             "logs:CreateLogGroup",
             "logs:CreateLogStream",
-            "logs:PutLogEvents",
+            "logs:PutLogEvents"
           ],
-          Resource: "arn:aws:logs:*:*:*",
-        },
-      ],
-    }),
+          "Resource": "arn:aws:logs:*:*:*"
+        }
+      ]
+    }`,
     tags: {
       ...commonTags,
       Name: "pathfinder-better-stack-lambda-policy",
@@ -589,10 +617,24 @@ new aws.iam.RolePolicyAttachment(
   }
 );
 
+
+// Automatically install Lambda dependencies during deployment
+const installLambdaDeps = new command.local.Command("install-lambda-deps", {
+  create: "npm install --production",
+  dir: "../../logtail-aws-lambda",
+  environment: {
+    NODE_ENV: "production",
+  },
+});
+
 // Create a deployment package for the Lambda function
 const betterStackLambdaPackage = new pulumi.asset.FileArchive(
   "../../logtail-aws-lambda"
 );
+
+if (!process.env.BETTER_STACK_ENTRYPOINT || !process.env.BETTER_STACK_SOURCE_TOKEN) {
+  throw new Error("BETTER_STACK_ENTRYPOINT and BETTER_STACK_SOURCE_TOKEN must be set");
+}
 
 // Better Stack Lambda function
 const betterStackLambda = new aws.lambda.Function(
@@ -608,8 +650,8 @@ const betterStackLambda = new aws.lambda.Function(
     environment: {
       variables: {
         BETTER_STACK_ENTRYPOINT:
-          "https://s1374763.eu-nbg-2.betterstackdata.com",
-        BETTER_STACK_SOURCE_TOKEN: "1qUb5qfDVR8L5dvCUS872M4n",
+          process.env.BETTER_STACK_ENTRYPOINT,
+        BETTER_STACK_SOURCE_TOKEN: process.env.BETTER_STACK_SOURCE_TOKEN,
       },
     },
     tags: {
@@ -617,7 +659,8 @@ const betterStackLambda = new aws.lambda.Function(
       Name: "pathfinder-better-stack-lambda",
       Type: "log-forwarder",
     },
-  }
+  },
+  { dependsOn: [installLambdaDeps] }
 );
 
 // CloudWatch subscription filters to forward ALL logs to Better Stack
@@ -636,16 +679,31 @@ const betterStackECSSubscriptionFilter =
 // 2. RDS PostgreSQL logs
 const rdsLogGroupNameOutput = pulumi.interpolate`/aws/rds/instance/${db.id}/postgresql`;
 
+// Create the RDS log group explicitly
+const rdsLogGroup = new aws.cloudwatch.LogGroup(
+  "pathfinder-rds-log-group",
+  {
+    name: rdsLogGroupNameOutput,
+    retentionInDays: 7, // Keep logs for 7 days
+    tags: {
+      ...commonTags,
+      Name: "pathfinder-rds-log-group",
+      Type: "logging",
+    },
+  },
+  { dependsOn: [db] } // Ensure RDS is created first
+);
+
 const betterStackRDSSubscriptionFilter =
   new aws.cloudwatch.LogSubscriptionFilter(
     "pathfinder-better-stack-rds-subscription-filter",
     {
-      logGroup: rdsLogGroupNameOutput,
+      logGroup: rdsLogGroup.name,
       filterPattern: "", // Forward all logs
       destinationArn: betterStackLambda.arn,
       name: "logtail-aws-lambda-rds-filter",
     },
-    { dependsOn: [db] } // Ensure RDS is created first
+    { dependsOn: [rdsLogGroup] } // Ensure log group is created first
   );
 
 // Grant CloudWatch Logs permission to invoke the Lambda function from ECS
@@ -668,11 +726,7 @@ const betterStackLambdaPermissionRDS = new aws.lambda.Permission(
     action: "lambda:InvokeFunction",
     function: betterStackLambda.name,
     principal: "logs.amazonaws.com",
-    sourceArn: pulumi.interpolate`arn:aws:logs:${aws.config.region}:${aws
-      .getCallerIdentity()
-      .then((id) => id.accountId)}:log-group:/aws/rds/instance/${
-      db.id
-    }/postgresql:*`,
+    sourceArn: pulumi.interpolate`${rdsLogGroup.arn}:*`,
   }
 );
 
@@ -688,8 +742,14 @@ export const dbConnectionString = pulumi.interpolate`postgresql://${db.username}
 export const dbPasswordSecret = pulumi.secret(dbPassword.result);
 export const dbUsername = db.username;
 
+// Migration information
+export const migrationStatus = runMigrations.stdout;
+
 // Better Stack logging information
 export const betterStackLambdaArn = betterStackLambda.arn;
 export const betterStackLambdaName = betterStackLambda.name;
 export const logGroupName = logGroup.name;
-export const rdsLogGroupName = rdsLogGroupNameOutput;
+export const rdsLogGroupName = rdsLogGroup.name;
+
+// Simplified build - no CodeBuild needed!
+export const ecrRepositoryUrl = repo.url;

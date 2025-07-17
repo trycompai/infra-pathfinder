@@ -1,81 +1,61 @@
-# Pathfinder Monorepo
+ # AWS TypeScript Pulumi Template
 
-A modern monorepo powered by [Turborepo](https://turbo.build) and [Bun](https://bun.sh).
+ A minimal Pulumi template for provisioning AWS infrastructure using TypeScript. This template creates an Amazon S3 bucket and exports its name.
 
-## What's inside?
+ ## Prerequisites
 
-This monorepo includes the following packages/apps:
+ - Pulumi CLI (>= v3): https://www.pulumi.com/docs/get-started/install/
+ - Node.js (>= 14): https://nodejs.org/
+ - AWS credentials configured (e.g., via `aws configure` or environment variables)
 
-### Apps
+ ## Getting Started
 
-- `@pathfinder/web`: A [Next.js](https://nextjs.org/) app
-- `infra`: [Pulumi](https://pulumi.com/) infrastructure as code for AWS deployment
+ 1. Initialize a new Pulumi project:
 
-### Packages
+    ```bash
+    pulumi new aws-typescript
+    ```
 
-- (Add shared packages here as you grow)
+    Follow the prompts to set your:
+    - Project name
+    - Project description
+    - AWS region (defaults to `us-east-1`)
 
-## Getting Started
+ 2. Preview and deploy your infrastructure:
 
-### Prerequisites
+    ```bash
+    pulumi preview
+    pulumi up
+    ```
 
-- [Bun](https://bun.sh) installed
-- [Node.js](https://nodejs.org/) 18+
-- AWS credentials configured (for infrastructure deployment)
+ 3. When you're finished, tear down your stack:
 
-### Development
+    ```bash
+    pulumi destroy
+    pulumi stack rm
+    ```
 
-To develop all apps and packages, run:
+ ## Project Layout
 
-```bash
-bun install
-bun dev
-```
+ - `Pulumi.yaml` — Pulumi project and template metadata
+ - `index.ts` — Main Pulumi program (creates an S3 bucket)
+ - `package.json` — Node.js dependencies
+ - `tsconfig.json` — TypeScript compiler options
 
-### Build
+ ## Configuration
 
-To build all apps and packages, run:
+ | Key           | Description                             | Default     |
+ | ------------- | --------------------------------------- | ----------- |
+ | `aws:region`  | The AWS region to deploy resources into | `us-east-1` |
 
-```bash
-bun build
-```
+ Use `pulumi config set <key> <value>` to customize configuration.
 
-### Infrastructure
+ ## Next Steps
 
-Infrastructure commands are available from the root:
+ - Extend `index.ts` to provision additional resources (e.g., VPCs, Lambda functions, DynamoDB tables).
+ - Explore [Pulumi AWSX](https://www.pulumi.com/docs/reference/pkg/awsx/) for higher-level AWS components.
+ - Consult the [Pulumi documentation](https://www.pulumi.com/docs/) for more examples and best practices.
 
-```bash
-bun run infra:install    # Install infrastructure dependencies
-bun run infra:preview    # Preview infrastructure changes
-bun run infra:up         # Deploy infrastructure
-bun run infra:destroy    # Tear down infrastructure
-```
+ ## Getting Help
 
-## CI/CD Deployment (Recommended for Apple Silicon users)
-
-Local Docker builds on Apple Silicon can be slow due to x86 emulation. We've set up GitHub Actions for faster deployments:
-
-- **Push to main** → Automatic deployment
-- **Open a PR** → See infrastructure preview
-
-See [CI/CD Setup Guide](docs/CI_SETUP.md) for configuration instructions.
-
-## Remote Development
-
-## Turborepo
-
-This monorepo uses [Turborepo](https://turbo.build) for:
-
-- **Smart caching** - Only rebuild what changed
-- **Parallel execution** - Run tasks in parallel
-- **Task dependencies** - Ensure tasks run in the right order
-- **Remote caching** - Share cache artifacts across machines
-
-Learn more about Turborepo in their [documentation](https://turbo.build/repo/docs).
-
-## Useful Commands
-
-- `bun dev` - Start all apps in development mode
-- `bun build` - Build all apps for production
-- `bun lint` - Lint all apps
-- `bun type-check` - Type check all apps
+ If you encounter any issues or have suggestions, please open an issue in this repository.
