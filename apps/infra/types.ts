@@ -155,14 +155,34 @@ export interface GithubOidcOutputs {
   readOnlyRoleArn: pulumi.Output<string>;
 }
 
-export interface CodeBuildOutputs {
-  migrationProjectName: pulumi.Output<string>;
-  migrationProjectArn: pulumi.Output<string>;
+export interface BuildSystemOutputs {
   appProjectName: pulumi.Output<string>;
   appProjectArn: pulumi.Output<string>;
+  migrationProjectName: pulumi.Output<string>;
+  migrationProjectArn: pulumi.Output<string>;
   codebuildRoleArn: pulumi.Output<string>;
   buildInstanceType: string;
   buildTimeout: number;
+  createApplicationDeployment: (
+    app: ApplicationConfig,
+    database: DatabaseOutputs,
+    container: ContainerOutputs
+  ) => ApplicationDeployment;
+}
+
+
+
+export interface ApplicationDeployment {
+  appName: string;
+  contextPath: string;
+  buildCommands: {
+    deployWithMigrations: string;
+  };
+  containerImage: pulumi.Output<string>;
+  healthCheckPath: string;
+  resourceRequirements: { cpu: number; memory: number };
+  scaling: { minInstances: number; maxInstances: number; targetCpuPercent: number };
+  buildProject: pulumi.Output<string>;
 }
 
 export interface TailscaleOutputs {
