@@ -1,54 +1,41 @@
 # Stage 1: Dependencies
-FROM oven/bun:1.2.18-alpine AS deps
+FROM public.ecr.aws/lambda/nodejs:18-x86_64 AS deps
 WORKDIR /app
+
+# Install Bun
+RUN curl -fsSL https://bun.sh/install | bash && \
+    ln -s /root/.bun/bin/bun /usr/local/bin/bun
 
 # Copy only package files first (for better caching)
 COPY package.json bun.lock* ./
 RUN bun install --frozen-lockfile
 
 # Stage 2: Builder
-FROM oven/bun:1.2.18-alpine AS builder
+FROM public.ecr.aws/lambda/nodejs:18-x86_64 AS builder
 WORKDIR /app
 
-# Install AWS RDS certificates for proper SSL verification
-RUN apk add --no-cache curl && \
-    curl -o /tmp/global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem && \
-    mkdir -p /usr/local/share/ca-certificates && \
-    cp /tmp/global-bundle.pem /usr/local/share/ca-certificates/rds-ca-bundle.crt && \
-    update-ca-certificates
+# Install Bun
+RUN curl -fsSL https://bun.sh/install | bash && \
+    ln -s /root/.bun/bin/bun /usr/local/bin/bun
 
-# Accept database connection parameters as build arguments
-ARG PGHOST
-ARG PGPORT
-ARG PGDATABASE
-ARG PGUSER
-ARG PGPASSWORD
-ARG PGSSLMODE
+# Accept DATABASE_URL as build argument
+ARG DATABASE_URL
+ENV DATABASE_URL=$DATABASE_URL
 
 # Copy dependencies from previous stage
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Build the application with properly constructed DATABASE_URL (SSL with proper certs)
-RUN export DATABASE_URL="postgresql://${PGUSER}:${PGPASSWORD}@${PGHOST}:${PGPORT}/${PGDATABASE}?sslmode=require" && \
-    export NODE_ENV="production" && \
-    echo "Building with DATABASE_URL: postgresql://${PGUSER}:***@${PGHOST}:${PGPORT}/${PGDATABASE}" && \
-    echo "🧪 Testing database connection before build..." && \
-    node test-build-connection.js && \
-    echo "🚀 Starting Next.js build..." && \
-    bun run build
+# Build the application
+RUN bun run build
 
 # Stage 3: Runner
-FROM oven/bun:1.2.18-alpine AS runner
+FROM public.ecr.aws/lambda/nodejs:18-x86_64 AS runner
 WORKDIR /app
 
-# Install AWS RDS certificates for runtime SSL connections
-RUN apk add --no-cache curl && \
-    curl -o /tmp/global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem && \
-    mkdir -p /usr/local/share/ca-certificates && \
-    cp /tmp/global-bundle.pem /usr/local/share/ca-certificates/rds-ca-bundle.crt && \
-    update-ca-certificates && \
-    rm -rf /tmp/global-bundle.pem
+# Install Bun
+RUN curl -fsSL https://bun.sh/install | bash && \
+    ln -s /root/.bun/bin/bun /usr/local/bin/bun
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
