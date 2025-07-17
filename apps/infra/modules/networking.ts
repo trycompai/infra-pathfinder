@@ -352,13 +352,42 @@ export function createNetworking(config: CommonConfig) {
     },
   });
 
-  // ECR API VPC Endpoint
+  // Shared security group for VPC endpoints (allows both ECS and CodeBuild access)
+  const vpcEndpointSecurityGroup = new aws.ec2.SecurityGroup("pathfinder-vpc-endpoint-sg", {
+    vpcId: vpc.id,
+    description: "Security group for VPC endpoints (ECR, CodeBuild, CloudWatch)",
+    ingress: [
+      {
+        protocol: "tcp",
+        fromPort: 443,
+        toPort: 443,
+        securityGroups: [ecsSecurityGroup.id, codeBuildSecurityGroup.id],
+        description: "HTTPS access from ECS and CodeBuild",
+      },
+    ],
+    egress: [
+      {
+        protocol: "-1",
+        fromPort: 0,
+        toPort: 0,
+        cidrBlocks: ["0.0.0.0/0"],
+        description: "All outbound traffic",
+      },
+    ],
+    tags: {
+      ...commonTags,
+      Name: "pathfinder-vpc-endpoint-sg",
+      Type: "security-group",
+    },
+  });
+
+  // ECR API VPC Endpoint (both public and private subnets for CodeBuild + ECS)
   const ecrApiVpcEndpoint = new aws.ec2.VpcEndpoint("pathfinder-ecr-api-endpoint", {
     vpcId: vpc.id,
     serviceName: `com.amazonaws.${config.awsRegion}.ecr.api`,
     vpcEndpointType: "Interface",
-    subnetIds: privateSubnetIds,
-    securityGroupIds: [ecsSecurityGroup.id],
+    subnetIds: [...privateSubnetIds, ...publicSubnetIds],
+    securityGroupIds: [vpcEndpointSecurityGroup.id],
     tags: {
       ...commonTags,
       Name: "pathfinder-ecr-api-endpoint",
@@ -366,16 +395,44 @@ export function createNetworking(config: CommonConfig) {
     },
   });
 
-  // ECR DKR VPC Endpoint
+  // ECR DKR VPC Endpoint (both public and private subnets for CodeBuild + ECS)
   const ecrDkrVpcEndpoint = new aws.ec2.VpcEndpoint("pathfinder-ecr-dkr-endpoint", {
     vpcId: vpc.id,
     serviceName: `com.amazonaws.${config.awsRegion}.ecr.dkr`,
     vpcEndpointType: "Interface",
-    subnetIds: privateSubnetIds,
-    securityGroupIds: [ecsSecurityGroup.id],
+    subnetIds: [...privateSubnetIds, ...publicSubnetIds],
+    securityGroupIds: [vpcEndpointSecurityGroup.id],
     tags: {
       ...commonTags,
       Name: "pathfinder-ecr-dkr-endpoint",
+      Type: "vpc-endpoint",
+    },
+  });
+
+  // CodeBuild VPC Endpoint (essential for CodeBuild to work in VPC)
+  const codebuildVpcEndpoint = new aws.ec2.VpcEndpoint("pathfinder-codebuild-endpoint", {
+    vpcId: vpc.id,
+    serviceName: `com.amazonaws.${config.awsRegion}.codebuild`,
+    vpcEndpointType: "Interface",
+    subnetIds: publicSubnetIds,
+    securityGroupIds: [vpcEndpointSecurityGroup.id],
+    tags: {
+      ...commonTags,
+      Name: "pathfinder-codebuild-endpoint",
+      Type: "vpc-endpoint",
+    },
+  });
+
+  // CloudWatch Logs VPC Endpoint (for CodeBuild logging)
+  const logsVpcEndpoint = new aws.ec2.VpcEndpoint("pathfinder-logs-endpoint", {
+    vpcId: vpc.id,
+    serviceName: `com.amazonaws.${config.awsRegion}.logs`,
+    vpcEndpointType: "Interface",
+    subnetIds: publicSubnetIds,
+    securityGroupIds: [vpcEndpointSecurityGroup.id],
+    tags: {
+      ...commonTags,
+      Name: "pathfinder-logs-endpoint",
       Type: "vpc-endpoint",
     },
   });
@@ -403,6 +460,8 @@ export function createNetworking(config: CommonConfig) {
       s3: s3VpcEndpoint.id,
       ecrApi: ecrApiVpcEndpoint.id,
       ecrDkr: ecrDkrVpcEndpoint.id,
+      codebuild: codebuildVpcEndpoint.id,
+      logs: logsVpcEndpoint.id,
     },
   };
 } 
