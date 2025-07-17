@@ -6,8 +6,8 @@ WORKDIR /app
 # Copy package files first for better caching
 COPY package.json ./
 
-# Install dependencies using npm (reliable and available everywhere)
-RUN npm ci --production=false
+# Install dependencies using npm install (no package-lock.json available)
+RUN npm install --production=false
 
 # Copy the entire src directory to avoid import path issues
 COPY src/ ./src/
