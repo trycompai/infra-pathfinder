@@ -23,6 +23,7 @@ RUN yum update -y && yum install -y unzip && \
 # Accept DATABASE_URL as build argument
 ARG DATABASE_URL
 ENV DATABASE_URL=$DATABASE_URL
+ENV NODE_ENV=production
 
 # Copy dependencies from previous stage
 COPY --from=deps /app/node_modules ./node_modules
