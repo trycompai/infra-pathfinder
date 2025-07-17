@@ -1,0 +1,26 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - echo "Logging in to Amazon ECR..."
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - REPOSITORY_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - IMAGE_TAG=${COMMIT_HASH:=latest}
+
+  build:
+    commands:
+      - echo "Build started on $(date)"
+      - cd apps/web
+      - echo "Building migration image"
+      - docker build -f Dockerfile.migration -t $IMAGE_REPO_NAME:migration-$IMAGE_TAG .
+      - docker tag $IMAGE_REPO_NAME:migration-$IMAGE_TAG $REPOSITORY_URI:migration-$IMAGE_TAG
+      - docker tag $IMAGE_REPO_NAME:migration-$IMAGE_TAG $REPOSITORY_URI:migration-latest
+
+  post_build:
+    commands:
+      - echo "Build completed on $(date)"
+      - echo "Pushing migration image..."
+      - docker push $REPOSITORY_URI:migration-$IMAGE_TAG
+      - docker push $REPOSITORY_URI:migration-latest 

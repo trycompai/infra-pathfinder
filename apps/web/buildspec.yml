@@ -4,50 +4,22 @@ phases:
   pre_build:
     commands:
       - echo "Logging in to Amazon ECR..."
-      - aws --version
       - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
       - REPOSITORY_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME
       - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
       - IMAGE_TAG=${COMMIT_HASH:=latest}
-      - echo "Repository URI is $REPOSITORY_URI"
-      - echo "Image tag is $IMAGE_TAG"
-      - echo "Installing Bun..."
       - curl -fsSL https://bun.sh/install | bash
-      - echo "Verifying Bun installation..."
-      - /root/.bun/bin/bun --version
-      - echo "DATABASE_URL is configured for build-time access"
 
   build:
     commands:
-      - echo "Build started on $(date)"
       - cd apps/web
-      - echo "=== Environment Debug ==="
-      - echo "NODE_ENV is $NODE_ENV"
-      - echo "DATABASE_URL format check (masked):"
-      - echo "$DATABASE_URL" | sed 's/:[^:]*@/:***@/' | sed 's/\/\/[^@]*@/\/\/***@/'
-      - echo "=== End Environment Debug ==="
-      - echo "PHASE 1 - Installing dependencies"
       - /root/.bun/bin/bun install --frozen-lockfile
-      - echo "PHASE 2 - Fix DATABASE_URL for app image build"
-      - DB_HOST=$(echo "$DATABASE_URL" | sed 's/.*@\([^@]*\).*/\1/' | cut -d':' -f1)
-      - DB_IP=$(nslookup $DB_HOST | grep "Address:" | tail -1 | awk '{print $2}')
-      - export DATABASE_URL=$(echo "$DATABASE_URL" | sed "s/$DB_HOST/$DB_IP/")
-      - echo "Using IP-based DATABASE_URL for app build"
-      - echo "PHASE 3 - Building migration image (no DATABASE_URL needed)"
-      - docker build -f Dockerfile.migration -t $IMAGE_REPO_NAME:migration-$IMAGE_TAG .
-      - docker tag $IMAGE_REPO_NAME:migration-$IMAGE_TAG $REPOSITORY_URI:migration-$IMAGE_TAG
-      - docker tag $IMAGE_REPO_NAME:migration-$IMAGE_TAG $REPOSITORY_URI:migration-latest
-      - docker push $REPOSITORY_URI:migration-$IMAGE_TAG
-      - docker push $REPOSITORY_URI:migration-latest
-      - echo "PHASE 4 - Building main app image (with DATABASE_URL for build-time operations)"
       - docker build --build-arg DATABASE_URL=$DATABASE_URL -t $IMAGE_REPO_NAME:$IMAGE_TAG .
       - docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $REPOSITORY_URI:$IMAGE_TAG
       - docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $REPOSITORY_URI:latest
 
   post_build:
     commands:
-      - echo "Build completed on $(date)"
-      - echo "Pushing the Docker images..."
       - docker push $REPOSITORY_URI:$IMAGE_TAG
       - docker push $REPOSITORY_URI:latest
       - echo "Updating ECS service to deploy new image..."
