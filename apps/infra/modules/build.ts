@@ -144,9 +144,13 @@ export function createBuildSystem(config: CommonConfig, network: NetworkOutputs,
           value: process.env.NODE_ENV || "production",
           type: "PLAINTEXT",
         },
-      ],
+            ],
     },
-
+    vpcConfig: {
+      vpcId: network.vpcId,
+      subnets: network.privateSubnetIds,  // PRIVATE subnets (not public)
+      securityGroupIds: [network.securityGroups.codeBuild],
+    },
     source: {
       type: "GITHUB",
       location: `https://github.com/${config.githubOrg}/${config.githubRepo}.git`,
