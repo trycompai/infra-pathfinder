@@ -90,10 +90,10 @@ export function createBuildSystem(config: CommonConfig, network: NetworkOutputs,
 
 
 
-  // CodeBuild project for building and deploying the application (includes migrations)
+  // CodeBuild project for building application image (requires database access)
   const appProject = new aws.codebuild.Project("pathfinder-app-build", {
-    name: "pathfinder-app",
-    description: "Build project that runs migrations and deploys application to ECS",
+    name: "pathfinder-app-build", 
+    description: "Build application Docker image with database access",
     serviceRole: codebuildRole.arn,
     artifacts: {
       type: "NO_ARTIFACTS",
@@ -161,7 +161,53 @@ export function createBuildSystem(config: CommonConfig, network: NetworkOutputs,
       ...commonTags,
       Name: "pathfinder-app-build",
       Type: "codebuild-project",
-      Purpose: "full-application-deployment",
+      Purpose: "application-image-build",
+    },
+  });
+
+  // CodeBuild project for building migration image (no database access needed)
+  const migrationProject = new aws.codebuild.Project("pathfinder-migration-build", {
+    name: "pathfinder-migration-build",
+    description: "Build migration Docker image (standalone)",
+    serviceRole: codebuildRole.arn,
+    artifacts: {
+      type: "NO_ARTIFACTS",
+    },
+    environment: {
+      computeType: "BUILD_GENERAL1_MEDIUM",
+      image: "aws/codebuild/standard:7.0",
+      type: "LINUX_CONTAINER",
+      privilegedMode: true, // Required for Docker builds
+      environmentVariables: [
+        {
+          name: "AWS_ACCOUNT_ID",
+          value: aws.getCallerIdentityOutput().accountId,
+          type: "PLAINTEXT",
+        },
+        {
+          name: "IMAGE_REPO_NAME",
+          value: "pathfinder",
+          type: "PLAINTEXT",
+        },
+        {
+          name: "AWS_DEFAULT_REGION",
+          value: config.awsRegion,
+          type: "PLAINTEXT",
+        },
+      ],
+    },
+    // No VPC config - doesn't need database access
+    source: {
+      type: "GITHUB",
+      location: `https://github.com/${config.githubOrg}/${config.githubRepo}.git`,
+      buildspec: "apps/web/buildspec-migration.yml",
+      gitCloneDepth: 1,
+    },
+    tags: {
+      ...commonTags,
+      Name: "pathfinder-migration-build",
+      Type: "codebuild-project",
+      Purpose: "migration-image-build",
     },
   });
 
@@ -234,6 +280,8 @@ export function createBuildSystem(config: CommonConfig, network: NetworkOutputs,
   return {
     appProjectName: appProject.name,
     appProjectArn: appProject.arn,
+    migrationProjectName: migrationProject.name,
+    migrationProjectArn: migrationProject.arn,
     codebuildRoleArn: codebuildRole.arn,
     buildInstanceType: "BUILD_GENERAL1_MEDIUM",
     buildTimeout: 20,
