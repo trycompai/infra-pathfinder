@@ -89,8 +89,8 @@ export function createBuildSystem(config: CommonConfig, network: NetworkOutputs,
   });
 
   // Security group for CodeBuild to access database
-  const codebuildSecurityGroup = new aws.ec2.SecurityGroup("pathfinder-codebuild-sg", {
-    name: "pathfinder-codebuild-sg",
+  const codebuildSecurityGroup = new aws.ec2.SecurityGroup("pathfinder-codebuild-sg-v2", {
+    name: "pathfinder-codebuild-sg-v2",
     description: "Security group for CodeBuild to access database and external services",
     vpcId: network.vpcId,
     egress: [
@@ -104,13 +104,13 @@ export function createBuildSystem(config: CommonConfig, network: NetworkOutputs,
     ],
     tags: {
       ...commonTags,
-      Name: "pathfinder-codebuild-sg",
+      Name: "pathfinder-codebuild-sg-v2",
       Type: "security-group",
     },
   });
 
   // Allow CodeBuild to access the database
-  const codebuildToDbRule = new aws.ec2.SecurityGroupRule("pathfinder-codebuild-to-db", {
+  const codebuildToDbRule = new aws.ec2.SecurityGroupRule("pathfinder-codebuild-to-db-v2", {
     type: "ingress",
     fromPort: 5432,
     toPort: 5432,
