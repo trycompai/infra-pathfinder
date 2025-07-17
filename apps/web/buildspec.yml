@@ -35,16 +35,25 @@ phases:
       - nslookup $DB_HOST || echo "DNS resolution failed"
       - echo "Testing network connectivity..."
       - telnet $DB_HOST 5432 || echo "Connection test failed"
-      - echo "PHASE 3 - Running database migrations directly"
+      - echo "PHASE 3 - Testing Node.js database connection"
+      - echo "Testing with Node.js pg client..."
+      - /root/.bun/bin/bun -e "
+          const { Pool } = require('pg');
+          const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+          pool.connect()
+            .then(client => { console.log('✅ Node.js connection SUCCESS'); client.release(); })
+            .catch(err => console.log('❌ Node.js connection FAILED:', err.message));
+        "
+      - echo "PHASE 4 - Running database migrations directly"
       - echo "Running migrations with DATABASE_URL (masked for security)"
       - /root/.bun/bin/bun run scripts/run-migrations.ts
-      - echo "PHASE 4 - Building migration image (for consistency)"
+      - echo "PHASE 5 - Building migration image (for consistency)"
       - docker build -f Dockerfile.migration -t $IMAGE_REPO_NAME:migration-$IMAGE_TAG .
       - docker tag $IMAGE_REPO_NAME:migration-$IMAGE_TAG $REPOSITORY_URI:migration-$IMAGE_TAG
       - docker tag $IMAGE_REPO_NAME:migration-$IMAGE_TAG $REPOSITORY_URI:migration-latest
       - docker push $REPOSITORY_URI:migration-$IMAGE_TAG
       - docker push $REPOSITORY_URI:migration-latest
-      - echo "PHASE 4 - Building main app image with database access"
+      - echo "PHASE 6 - Building main app image with database access"
       - docker build --build-arg DATABASE_URL=$DATABASE_URL -t $IMAGE_REPO_NAME:$IMAGE_TAG .
       - docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $REPOSITORY_URI:$IMAGE_TAG
       - docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $REPOSITORY_URI:latest
