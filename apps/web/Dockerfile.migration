@@ -30,5 +30,5 @@ RUN echo "=== Directory structure ===" && \
 # Set environment for better error reporting
 ENV NODE_ENV=production
 
-# Use drizzle-kit push instead of runtime migrations for reliability
-CMD ["sh", "-c", "echo 'Starting migration container...' && bun run db:push"] 
+# Use drizzle-kit push (non-interactive by default) for reliable schema sync
+CMD ["sh", "-c", "echo 'Starting migration container...' && bun drizzle-kit push"] 
