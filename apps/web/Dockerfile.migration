@@ -30,5 +30,5 @@ RUN echo "=== Directory structure ===" && \
 # Set environment for better error reporting
 ENV NODE_ENV=production
 
-# Default command runs migrations with verbose output using Bun
-CMD ["sh", "-c", "echo 'Starting migration container...' && bun run scripts/run-migrations.ts"] 
+# Use drizzle-kit push instead of runtime migrations for reliability
+CMD ["sh", "-c", "echo 'Starting migration container...' && bun run db:push"] 
