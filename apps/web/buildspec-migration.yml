@@ -31,7 +31,6 @@ phases:
   build:
     commands:
       - echo "Build started on $(date)"
-      - cd apps/web
       - |
         if [ "$SKIP_BUILD" = "false" ]; then
           echo "🔨 Building migration image $IMAGE_TAG"
