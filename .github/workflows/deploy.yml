@@ -53,55 +53,34 @@ jobs:
       - name: Wait for infrastructure stabilization
         run: sleep 30
         
-      - name: Build migration image
+      - name: Build migration image and run migrations
         run: |
-          BUILD_ID=$(aws codebuild start-build \
-            --project-name pathfinder-migration-build \
-            --query 'build.id' --output text)
-          echo "Migration build started: $BUILD_ID"
+          echo "🔍 Checking migration content hash and building if needed"
           
-          # Wait for migration build to complete
-          aws codebuild batch-get-builds --ids $BUILD_ID \
-            --query 'builds[0].buildStatus' --output text
-          
-          while [ "$(aws codebuild batch-get-builds --ids $BUILD_ID --query 'builds[0].buildStatus' --output text)" = "IN_PROGRESS" ]; do
-            echo "Waiting for migration build to complete..."
-            sleep 30
-          done
-          
-          STATUS=$(aws codebuild batch-get-builds --ids $BUILD_ID --query 'builds[0].buildStatus' --output text)
-          if [ "$STATUS" != "SUCCEEDED" ]; then
-            echo "Migration build failed with status: $STATUS"
-            exit 1
-          fi
-          echo "Migration build completed successfully"
-          
-      - name: Run database migrations
-        run: |
-          # Run migrations via CodeBuild (which has VPC access to database)
-          MIGRATION_RUN_ID=$(aws codebuild start-build \
+          MIGRATION_BUILD_ID=$(aws codebuild start-build \
             --project-name pathfinder-migration-build \
             --environment-variables-override name=RUN_MIGRATIONS,value=true \
             --query 'build.id' --output text)
           
-          echo "Migration run started: $MIGRATION_RUN_ID"
+          echo "Migration build started: $MIGRATION_BUILD_ID"
           
-          # Wait for migration run to complete
-          while [ "$(aws codebuild batch-get-builds --ids $MIGRATION_RUN_ID --query 'builds[0].buildStatus' --output text)" = "IN_PROGRESS" ]; do
-            echo "Waiting for migrations to complete..."
+          # Wait for migration build to complete
+          while [ "$(aws codebuild batch-get-builds --ids $MIGRATION_BUILD_ID --query 'builds[0].buildStatus' --output text)" = "IN_PROGRESS" ]; do
+            echo "Waiting for migration build and execution to complete..."
             sleep 30
           done
           
           # Check if migration succeeded
-          STATUS=$(aws codebuild batch-get-builds --ids $MIGRATION_RUN_ID --query 'builds[0].buildStatus' --output text)
+          STATUS=$(aws codebuild batch-get-builds --ids $MIGRATION_BUILD_ID --query 'builds[0].buildStatus' --output text)
           if [ "$STATUS" != "SUCCEEDED" ]; then
-            echo "Migration failed with status: $STATUS"
+            echo "❌ Migration build/run failed with status: $STATUS"
             exit 1
           fi
-          echo "Migrations completed successfully"
+          echo "✅ Migration build and execution completed successfully"
           
       - name: Build application image
         run: |
+          echo "🔨 Building Next.js with database access, then packaging into Docker"
           BUILD_ID=$(aws codebuild start-build \
             --project-name pathfinder-app-build \
             --query 'build.id' --output text)

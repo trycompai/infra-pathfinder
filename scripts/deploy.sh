@@ -58,29 +58,19 @@ echo -e "${GREEN}✅ Infrastructure updated${NC}"
 echo -e "${YELLOW}⏳ Waiting for infrastructure to stabilize...${NC}"
 sleep 30
 
-# Step 2: Build Migration Image
-echo -e "${YELLOW}🔨 Step 2: Building migration image...${NC}"
+# Step 2: Smart Migration Build (content-based verification)
+echo -e "${YELLOW}🔍 Step 2: Checking migration content hash and building if needed...${NC}"
+
 migration_build_id=$(aws codebuild start-build \
     --project-name "$MIGRATION_PROJECT" \
-    --query 'build.id' --output text)
-
-echo "Migration build ID: $migration_build_id"
-wait_for_build "$migration_build_id" "Migration"
-
-# Step 3: Run Database Migrations via CodeBuild
-echo -e "${YELLOW}🗃️  Step 3: Running database migrations via CodeBuild...${NC}"
-
-# Run migration via CodeBuild (which has VPC access to database)
-migration_run_id=$(aws codebuild start-build \
-    --project-name pathfinder-migration-build \
     --environment-variables-override name=RUN_MIGRATIONS,value=true \
     --query 'build.id' --output text)
 
-echo "Migration run ID: $migration_run_id"
-wait_for_build "$migration_run_id" "Migration Run"
+echo "Migration build ID: $migration_build_id"
+wait_for_build "$migration_build_id" "Migration Build and Run"
 
-# Step 4: Build Application Image
-echo -e "${YELLOW}🔨 Step 4: Building application image...${NC}"
+# Step 3: Build Application (Next.js with DB access, then Docker packaging)
+echo -e "${YELLOW}🔨 Step 3: Building Next.js with database access, then packaging...${NC}"
 app_build_id=$(aws codebuild start-build \
     --project-name "$APP_PROJECT" \
     --query 'build.id' --output text)
@@ -88,8 +78,8 @@ app_build_id=$(aws codebuild start-build \
 echo "App build ID: $app_build_id"
 wait_for_build "$app_build_id" "Application"
 
-# Step 5: Deploy Application
-echo -e "${YELLOW}🚢 Step 5: Deploying application...${NC}"
+# Step 4: Deploy Application
+echo -e "${YELLOW}🚢 Step 4: Deploying application...${NC}"
 
 # Wait for ECR to process the new image
 echo -e "${YELLOW}⏳ Waiting for ECR to process new image...${NC}"
@@ -108,8 +98,8 @@ aws ecs wait services-stable \
 
 echo -e "${GREEN}✅ Application deployed successfully${NC}"
 
-# Step 6: Verify Deployment
-echo -e "${YELLOW}🔍 Step 6: Verifying deployment...${NC}"
+# Step 5: Verify Deployment
+echo -e "${YELLOW}🔍 Step 5: Verifying deployment...${NC}"
 
 # Get ALB DNS name
 alb_dns=$(aws elbv2 describe-load-balancers \

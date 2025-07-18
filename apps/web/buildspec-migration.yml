@@ -7,29 +7,66 @@ phases:
       - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
       - REPOSITORY_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME
       - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
-      - IMAGE_TAG=${COMMIT_HASH:=latest}
+      
+      # Generate hash of current migration files content
+      - echo "Generating hash of current migration files..."
+      - cd apps/web
+      - |
+        MIGRATION_HASH=$(find src/db/migrations -type f \( -name "*.sql" -o -name "*.json" \) | sort | xargs cat | sha256sum | cut -d' ' -f1 | cut -c 1-12)
+        echo "Current migration content hash: $MIGRATION_HASH"
+        export MIGRATION_HASH
+        export IMAGE_TAG=migration-$MIGRATION_HASH
+      
+      # Check if image with this exact migration content exists
+      - echo "Checking for existing image with matching content..."
+      - |
+        if aws ecr describe-images --repository-name $IMAGE_REPO_NAME --image-ids imageTag=$IMAGE_TAG --region $AWS_DEFAULT_REGION > /dev/null 2>&1; then
+          echo "✅ Found existing image with exact migration content: $IMAGE_TAG"
+          export SKIP_BUILD=true
+        else
+          echo "🔨 No image with current migration content - will build: $IMAGE_TAG"
+          export SKIP_BUILD=false
+        fi
 
   build:
     commands:
       - echo "Build started on $(date)"
       - cd apps/web
-      - echo "Building migration image"
-      - docker build -f Dockerfile.migration -t $IMAGE_REPO_NAME:migration-$IMAGE_TAG .
-      - docker tag $IMAGE_REPO_NAME:migration-$IMAGE_TAG $REPOSITORY_URI:migration-$IMAGE_TAG
-      - docker tag $IMAGE_REPO_NAME:migration-$IMAGE_TAG $REPOSITORY_URI:migration-latest
+      - |
+        if [ "$SKIP_BUILD" = "false" ]; then
+          echo "🔨 Building migration image $IMAGE_TAG"
+          docker build -f Dockerfile.migration -t $IMAGE_REPO_NAME:$IMAGE_TAG .
+          docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $REPOSITORY_URI:$IMAGE_TAG
+          docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $REPOSITORY_URI:migration-latest
+        else
+          echo "⏭️ Using existing verified migration image"
+          docker pull $REPOSITORY_URI:$IMAGE_TAG
+          # Update migration-latest to point to this verified image
+          docker tag $REPOSITORY_URI:$IMAGE_TAG $REPOSITORY_URI:migration-latest
+          docker push $REPOSITORY_URI:migration-latest
+        fi
+      
+      # Run migrations if requested
       - |
         if [ "$RUN_MIGRATIONS" = "true" ]; then
           echo "Running database migrations..."
-          docker run --rm \
-            -e DATABASE_URL="$DATABASE_URL" \
-            -e NODE_ENV="production" \
-            $IMAGE_REPO_NAME:migration-$IMAGE_TAG
+          if [ "$SKIP_BUILD" = "true" ]; then
+            docker run --rm -e DATABASE_URL="$DATABASE_URL" -e NODE_ENV="production" $REPOSITORY_URI:$IMAGE_TAG
+          else
+            docker run --rm -e DATABASE_URL="$DATABASE_URL" -e NODE_ENV="production" $IMAGE_REPO_NAME:$IMAGE_TAG
+          fi
           echo "Migrations completed successfully"
         fi
 
   post_build:
     commands:
       - echo "Build completed on $(date)"
-      - echo "Pushing migration image..."
-      - docker push $REPOSITORY_URI:migration-$IMAGE_TAG
-      - docker push $REPOSITORY_URI:migration-latest 
+      - |
+        if [ "$SKIP_BUILD" = "false" ]; then
+          echo "📤 Pushing migration image..."
+          docker push $REPOSITORY_URI:$IMAGE_TAG
+          docker push $REPOSITORY_URI:migration-latest
+          echo "✅ Migration image pushed: $IMAGE_TAG"
+        else
+          echo "✅ Using existing verified image: $IMAGE_TAG"
+        fi 
