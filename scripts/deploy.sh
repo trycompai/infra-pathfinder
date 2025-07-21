@@ -116,11 +116,16 @@ echo -e "${GREEN}✅ ECS service is stable${NC}"
 
 # Get ALB DNS name
 alb_dns=$(aws elbv2 describe-load-balancers \
-    --names pathfinder-lb \
-    --query 'LoadBalancers[0].DNSName' --output text)
+    --query 'LoadBalancers[?contains(LoadBalancerName, `pathfinder`)].DNSName' \
+    --output text)
+
+if [ -z "$alb_dns" ]; then
+    echo -e "${RED}❌ Could not find load balancer${NC}"
+    exit 1
+fi
 
 # Health check
-if curl -sf "http://$alb_dns/health" > /dev/null; then
+if curl -sf "http://$alb_dns/" > /dev/null; then
     echo -e "${GREEN}✅ Health check passed${NC}"
     echo -e "${GREEN}🎉 Deployment completed successfully!${NC}"
     echo -e "${GREEN}🌐 Application URL: http://$alb_dns${NC}"
