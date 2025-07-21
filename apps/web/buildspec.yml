@@ -34,12 +34,12 @@ phases:
 
       - echo "=== RUNNING DATABASE MIGRATIONS ==="
       - echo "Running migrations before build..."
-      - /root/.bun/bin/bun run db:migrate:runtime
+      - NODE_TLS_REJECT_UNAUTHORIZED=0 /root/.bun/bin/bun run db:migrate:runtime
       - echo "✅ Database migrations completed"
 
       - echo "=== BUILDING NEXT.JS ON CODEBUILD HOST (WITH MIGRATED DATABASE) ==="
       - echo "Running Next.js build with database access for SSG..."
-      - /root/.bun/bin/bun run build
+      - NODE_TLS_REJECT_UNAUTHORIZED=0 /root/.bun/bin/bun run build
       - echo "✅ Next.js build completed with database access"
 
       - echo "=== PREPARING STANDALONE BUILD FILES ==="
