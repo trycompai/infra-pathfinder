@@ -12,6 +12,7 @@
     "db:studio": "prisma studio",
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
+    "db:migrate:runtime": "prisma migrate deploy",
     "debug:env": "node -e \"console.log('DATABASE_URL exists:', !!process.env.DATABASE_URL); console.log('DATABASE_URL length:', process.env.DATABASE_URL?.length || 0); console.log('All env vars:', Object.keys(process.env).length);\"",
     "test:env": "tsx scripts/test-env.ts",
     "type-check": "tsc --noEmit"

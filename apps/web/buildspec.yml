@@ -37,6 +37,19 @@ phases:
       - /root/.bun/bin/bun run build
       - echo "✅ Next.js build completed with database access"
 
+      - echo "=== PREPARING STANDALONE BUILD FILES ==="
+      - echo "Next.js standalone build requires manual copying of static files..."
+      - cp -r public .next/standalone/ || echo "No public folder found"
+      - cp -r .next/static .next/standalone/.next/ || echo "No static folder found"
+      - echo "✅ Standalone files prepared"
+
+      - echo "=== VERIFYING BUILD ARTIFACTS ==="
+      - echo "Checking if required files exist..."
+      - ls -la .next/standalone/ || echo "❌ .next/standalone/ not found"
+      - ls -la .next/standalone/.next/static/ || echo "❌ .next/standalone/.next/static/ not found"
+      - ls -la .next/standalone/public/ || echo "❌ .next/standalone/public/ not found"
+      - ls -la .next/standalone/server.js || echo "❌ server.js not found"
+
       - echo "=== BUILDING DOCKER IMAGE WITH BUILD ARTIFACTS ==="
       - |
         cat > Dockerfile.runtime << 'EOF'
@@ -53,10 +66,8 @@ phases:
         ENV PORT=3000
         ENV HOSTNAME="0.0.0.0"
 
-        # Copy pre-built Next.js artifacts from CodeBuild host
+        # Copy the complete standalone build (includes server.js, dependencies, static files, and public files)
         COPY .next/standalone ./
-        COPY .next/static ./.next/static
-        COPY public ./public
 
         EXPOSE 3000
         CMD ["bun", "server.js"]
