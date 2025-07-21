@@ -9,4 +9,11 @@ export default defineConfig({
   },
   verbose: true,
   strict: true,
+  driverOptions: {
+    connection: {
+      ssl: {
+        rejectUnauthorized: false,
+      },
+    },
+  },
 });

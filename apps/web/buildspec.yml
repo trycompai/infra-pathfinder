@@ -24,7 +24,7 @@ phases:
 
       - echo "=== RUNNING DATABASE MIGRATIONS ==="
       - echo "Running migrations before build..."
-      - /root/.bun/bin/bun run db:migrate
+      - /root/.bun/bin/bun run db:migrate:runtime
       - echo "✅ Database migrations completed"
 
       - echo "=== BUILDING NEXT.JS ON CODEBUILD HOST (WITH MIGRATED DATABASE) ==="
