@@ -55,9 +55,36 @@ phases:
       - ls -la .next/standalone/public/ || echo "❌ .next/standalone/public/ not found"
       - ls -la .next/standalone/server.js || echo "❌ server.js not found"
 
-      - echo "=== BUILDING DOCKER IMAGE WITH BUILD ARTIFACTS ==="
-      - echo "Using proper Docker build process with Prisma generation..."
-      - docker build --build-arg DATABASE_URL="$DATABASE_URL" --build-arg NODE_ENV=production -t $IMAGE_REPO_NAME:$IMAGE_TAG .
+      - echo "=== BUILDING DOCKER RUNTIME IMAGE WITH PRE-BUILT ARTIFACTS ==="
+      - echo "Creating runtime-only Docker image with build artifacts..."
+      - |
+        cat > Dockerfile.runtime << 'EOF'
+        # Use Node.js Alpine for smaller runtime image
+        FROM node:18-alpine AS runtime
+
+        WORKDIR /app
+
+        ENV NODE_ENV=production
+        ENV NEXT_TELEMETRY_DISABLED=1
+        ENV PORT=3000
+        ENV HOSTNAME="0.0.0.0"
+
+        # Copy the complete standalone build from CodeBuild
+        COPY .next/standalone ./
+
+        # Create non-root user for security
+        RUN addgroup -g 1001 -S nodejs && \
+            adduser -S nextjs -u 1001 && \
+            chown -R nextjs:nodejs /app
+
+        USER nextjs
+
+        EXPOSE 3000
+
+        # Use node to run the standalone server.js
+        CMD ["node", "server.js"]
+        EOF
+      - docker build -f Dockerfile.runtime -t $IMAGE_REPO_NAME:$IMAGE_TAG .
       - docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $REPOSITORY_URI:$IMAGE_TAG
       - docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $REPOSITORY_URI:latest
 
