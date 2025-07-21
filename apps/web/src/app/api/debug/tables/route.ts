@@ -1,17 +1,15 @@
-import { db, todos } from "@/db";
-import { count } from "drizzle-orm";
+import { prisma } from "@/db";
 import { NextResponse } from "next/server";
 
 export async function GET() {
   try {
-    // Test if we can access the todos table using Drizzle
+    // Test if we can access the todos table using Prisma
     let todoCount = null;
     let todoCountError = null;
     let tableAccessible = false;
 
     try {
-      const countResult = await db.select({ count: count() }).from(todos);
-      todoCount = countResult[0]?.count || 0;
+      todoCount = await prisma.todo.count();
       tableAccessible = true;
     } catch (error) {
       todoCountError = error instanceof Error ? error.message : String(error);

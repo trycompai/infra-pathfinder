@@ -1,4 +1,9 @@
-import type { DeleteResponse, Todo, TodoResponse, TodosResponse } from "@/types/api";
+import type {
+  DeleteResponse,
+  Todo,
+  TodoResponse,
+  TodosResponse,
+} from "@/types/api";
 import axios from "axios";
 
 const api = axios.create({
@@ -28,7 +33,10 @@ export const todosApi = {
   },
 
   // Update a todo
-  updateTodo: async (id: number, updates: Partial<Pick<Todo, "title" | "completed">>): Promise<Todo> => {
+  updateTodo: async (
+    id: string,
+    updates: Partial<Pick<Todo, "title" | "completed">>
+  ): Promise<Todo> => {
     const response = await api.put<TodoResponse>(`/todos/${id}`, updates);
     if (response.data.success && response.data.data) {
       return response.data.data;
@@ -37,10 +45,10 @@ export const todosApi = {
   },
 
   // Delete a todo
-  deleteTodo: async (id: number): Promise<void> => {
+  deleteTodo: async (id: string): Promise<void> => {
     const response = await api.delete<DeleteResponse>(`/todos/${id}`);
     if (!response.data.success) {
       throw new Error(response.data.error || "Failed to delete todo");
     }
   },
-}; 
+};

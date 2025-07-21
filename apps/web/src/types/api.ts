@@ -1,8 +1,7 @@
-import { todos } from "@/db";
-import type { InferSelectModel } from "drizzle-orm";
+import type { Todo as PrismaTodo } from "@prisma/client";
 
 // Database types
-export type Todo = InferSelectModel<typeof todos>;
+export type Todo = PrismaTodo;
 
 // API Response types
 export interface ApiResponse<T = unknown> {
@@ -22,4 +21,4 @@ export interface TodoResponse extends ApiResponse<Todo> {
 
 export interface DeleteResponse extends ApiResponse<never> {
   message: string;
-} 
+}

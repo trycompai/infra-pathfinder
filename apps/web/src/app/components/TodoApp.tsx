@@ -28,7 +28,7 @@ export default function TodoApp({ initialTodos }: TodoAppProps) {
     }
   };
 
-  const toggleTodo = async (id: number, completed: boolean) => {
+  const toggleTodo = async (id: string, completed: boolean) => {
     try {
       const updatedTodo = await todosApi.updateTodo(id, { completed });
       setTodos((prev) =>
@@ -41,7 +41,7 @@ export default function TodoApp({ initialTodos }: TodoAppProps) {
     }
   };
 
-  const deleteTodo = async (id: number) => {
+  const deleteTodo = async (id: string) => {
     try {
       await todosApi.deleteTodo(id);
       setTodos((prev) => prev.filter((todo) => todo.id !== id));

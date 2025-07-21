@@ -17,18 +17,15 @@ phases:
       - echo "DATABASE_URL length:" ${#DATABASE_URL}
       - echo "DATABASE_URL (masked):" $(echo "$DATABASE_URL" | sed 's/:[^@]*@/:***@/')
       - echo "NODE_ENV:" $NODE_ENV
-
-      # === FIX FOR AWS RDS SSL CERTIFICATE ===
-      # AWS RDS uses self-signed certificates, we need to configure SSL properly
-      - export PGSSLMODE=require
-      - export NODE_TLS_REJECT_UNAUTHORIZED=0
-      - echo "PGSSLMODE set to:" $PGSSLMODE
-      - echo "NODE_TLS_REJECT_UNAUTHORIZED set to:" $NODE_TLS_REJECT_UNAUTHORIZED
-
       - cd apps/web
 
       - echo "=== INSTALLING DEPENDENCIES ==="
+      - export PGSSLMODE=require
+      - export NODE_TLS_REJECT_UNAUTHORIZED=0
       - SKIP_ENV_VALIDATION=true /root/.bun/bin/bun install --frozen-lockfile
+
+      - echo "=== GENERATING PRISMA CLIENT ==="
+      - npx prisma generate
 
       - echo "=== RUNNING DATABASE MIGRATIONS ==="
       - echo "Running migrations before build..."

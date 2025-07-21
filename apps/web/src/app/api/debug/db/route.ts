@@ -1,17 +1,16 @@
-import { db, todos } from "@/db";
-import { count } from "drizzle-orm";
+import { prisma } from "@/db";
 import { NextResponse } from "next/server";
 
 export async function GET() {
   try {
-    // Test basic database connection using Drizzle selectors
-    const result = await db.select({ count: count() }).from(todos);
+    // Test basic database connection using Prisma
+    const todoCount = await prisma.todo.count();
 
     return NextResponse.json({
       status: "success",
       message: "Database connection works",
       tableAccessible: true,
-      todoCount: result[0]?.count || 0,
+      todoCount,
     });
   } catch (error) {
     return NextResponse.json(

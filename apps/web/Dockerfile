@@ -1,68 +1,77 @@
-# Stage 1: Dependencies
-FROM public.ecr.aws/lambda/nodejs:18-x86_64 AS deps
+# syntax=docker/dockerfile:1
+
+# ==========================================
+# BASE STAGE - Common setup for all stages
+# ==========================================
+FROM oven/bun:1 AS base
 WORKDIR /app
 
-# Install unzip (required for Bun installer) and Bun
-RUN yum update -y && yum install -y unzip && \
-    curl -fsSL https://bun.sh/install | bash && \
-    ln -s /root/.bun/bin/bun /usr/local/bin/bun
+# ==========================================
+# DEPS STAGE - Install production dependencies
+# ==========================================
+FROM base AS deps
+# Copy package files for dependency installation
+COPY package.json bun.lockb* ./
+# Install production dependencies only
+RUN bun install --frozen-lockfile --production
 
-# Copy only package files first (for better caching)
-COPY package.json bun.lock* ./
+# ==========================================
+# BUILD STAGE - Build the Next.js application
+# ==========================================
+FROM base AS builder
+WORKDIR /app
+
+# Copy package files
+COPY package.json bun.lockb* ./
+# Install all dependencies (including devDependencies needed for build)
 RUN bun install --frozen-lockfile
 
-# Stage 2: Builder
-FROM public.ecr.aws/lambda/nodejs:18-x86_64 AS builder
-WORKDIR /app
-
-# Install unzip (required for Bun installer) and Bun
-RUN yum update -y && yum install -y unzip && \
-    curl -fsSL https://bun.sh/install | bash && \
-    ln -s /root/.bun/bin/bun /usr/local/bin/bun
-
-# Accept DATABASE_URL as build argument
-ARG DATABASE_URL
-ENV DATABASE_URL=$DATABASE_URL
-ENV NODE_ENV=production
-
-# Copy dependencies from previous stage
-COPY --from=deps /app/node_modules ./node_modules
+# Copy source code
 COPY . .
+
+# Copy Prisma schema and generate client
+COPY prisma ./prisma
+RUN bunx prisma generate
+
+# Build arguments for compile-time environment variables
+ARG DATABASE_URL
+ARG NODE_ENV=production
+
+# Set environment variables for build
+ENV DATABASE_URL=$DATABASE_URL
+ENV NODE_ENV=$NODE_ENV
+ENV NEXT_TELEMETRY_DISABLED=1
 
 # Build the application
 RUN bun run build
 
-# Stage 3: Runner
-FROM public.ecr.aws/lambda/nodejs:18-x86_64 AS runner
+# ==========================================
+# RUNNER STAGE - Production runtime
+# ==========================================
+FROM base AS runner
 WORKDIR /app
 
-# Install unzip (required for Bun installer) and Bun
-RUN yum update -y && yum install -y unzip && \
-    curl -fsSL https://bun.sh/install | bash && \
-    ln -s /root/.bun/bin/bun /usr/local/bin/bun
-
+# Set production environment
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-
-# Cache bust to force rebuild
-LABEL build_date="2024-12-08-15:08"
-
-# Copy only necessary files
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-
-# Copy migration files and scripts for database migrations
-COPY --from=builder /app/src ./src
-COPY --from=builder /app/scripts ./scripts
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/drizzle.config.ts ./drizzle.config.ts
-COPY --from=builder /app/node_modules ./node_modules
-
-EXPOSE 3000
-
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
+# Create non-root user for security
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+# Copy necessary files from builder stage
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+# Switch to non-root user
+USER nextjs
+
+# Expose the application port
+EXPOSE 3000
+
+# Start the application
 CMD ["bun", "server.js"]
 

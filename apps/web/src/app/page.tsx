@@ -1,14 +1,14 @@
-import { db, todos } from "@/db";
+import { prisma } from "@/db";
 import { env } from "@/env";
-import { desc } from "drizzle-orm";
 import TodoApp from "./components/TodoApp";
 
 export default async function Home() {
   // Fetch todos server-side
-  const initialTodos = await db
-    .select()
-    .from(todos)
-    .orderBy(desc(todos.createdAt));
+  const initialTodos = await prisma.todo.findMany({
+    orderBy: {
+      createdAt: 'desc'
+    }
+  });
 
   console.log("initialTodos", initialTodos);
 

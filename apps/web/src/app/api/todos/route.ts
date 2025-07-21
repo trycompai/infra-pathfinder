@@ -1,4 +1,4 @@
-import { db, todos } from "@/db";
+import { prisma } from "@/db";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 
@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 export async function POST(request: Request) {
   try {
     const { title } = await request.json();
-    
+
     if (!title?.trim()) {
       return NextResponse.json(
         {
@@ -17,13 +17,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const [newTodo] = await db
-      .insert(todos)
-      .values({
+    const newTodo = await prisma.todo.create({
+      data: {
         title: title.trim(),
         completed: false,
-      })
-      .returning();
+      },
+    });
 
     revalidatePath("/");
 

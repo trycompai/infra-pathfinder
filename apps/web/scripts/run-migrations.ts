@@ -1,23 +1,31 @@
-import { migrate } from "drizzle-orm/node-postgres/migrator";
-import path from "path";
-import { db } from "../src/db";
+import { PrismaClient } from "@prisma/client";
+import { execSync } from "child_process";
 import { env } from "../src/env";
 
 async function runMigrations() {
   console.log("🚀 Starting database migrations...");
   console.log(
-    `📁 Migration directory: ${path.join(__dirname, "../src/db/migrations")}`
-  );
-  console.log(
     `🔗 Database URL: ${env.DATABASE_URL.replace(/:[^@]+@/, ":***@")}`
   ); // Hide password
 
   try {
-    await migrate(db, {
-      migrationsFolder: path.join(__dirname, "../src/db/migrations"),
+    // Run Prisma migrations
+    execSync("npx prisma migrate deploy", {
+      env: {
+        ...process.env,
+        DATABASE_URL: env.DATABASE_URL,
+      },
+      stdio: "inherit",
     });
 
     console.log("✅ Migrations completed successfully!");
+
+    // Verify connection
+    const prisma = new PrismaClient();
+    await prisma.$connect();
+    console.log("✅ Database connection verified!");
+    await prisma.$disconnect();
+
     process.exit(0);
   } catch (error) {
     console.error("❌ Migration failed:", error);
