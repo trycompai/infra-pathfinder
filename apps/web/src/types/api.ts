@@ -1,4 +1,4 @@
-import type { Todo as PrismaTodo } from "@prisma/client";
+import type { Todo as PrismaTodo } from "../generated/client";
 
 // Database types
 export type Todo = PrismaTodo;
