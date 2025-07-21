@@ -158,8 +158,6 @@ export interface GithubOidcOutputs {
 export interface BuildSystemOutputs {
   appProjectName: pulumi.Output<string>;
   appProjectArn: pulumi.Output<string>;
-  migrationProjectName: pulumi.Output<string>;
-  migrationProjectArn: pulumi.Output<string>;
   codebuildRoleArn: pulumi.Output<string>;
   buildInstanceType: string;
   buildTimeout: number;
@@ -170,8 +168,6 @@ export interface BuildSystemOutputs {
   ) => ApplicationDeployment;
 }
 
-
-
 export interface ApplicationDeployment {
   appName: string;
   contextPath: string;
@@ -181,7 +177,11 @@ export interface ApplicationDeployment {
   containerImage: pulumi.Output<string>;
   healthCheckPath: string;
   resourceRequirements: { cpu: number; memory: number };
-  scaling: { minInstances: number; maxInstances: number; targetCpuPercent: number };
+  scaling: {
+    minInstances: number;
+    maxInstances: number;
+    targetCpuPercent: number;
+  };
   buildProject: pulumi.Output<string>;
 }
 
@@ -290,7 +290,11 @@ export interface MetricConfig {
   period: number;
   evaluationPeriods: number;
   threshold: number;
-  comparisonOperator: "GreaterThanThreshold" | "LessThanThreshold" | "GreaterThanOrEqualToThreshold" | "LessThanOrEqualToThreshold";
+  comparisonOperator:
+    | "GreaterThanThreshold"
+    | "LessThanThreshold"
+    | "GreaterThanOrEqualToThreshold"
+    | "LessThanOrEqualToThreshold";
 }
 
 export interface AlarmConfig extends MetricConfig {
@@ -328,4 +332,4 @@ export interface IAMPolicyStatement {
     Federated?: string | string[];
   };
   Condition?: Record<string, Record<string, string | string[]>>;
-} 
+}

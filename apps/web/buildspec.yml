@@ -18,37 +18,45 @@ phases:
       - echo "DATABASE_URL (masked):" $(echo "$DATABASE_URL" | sed 's/:[^@]*@/:***@/')
       - echo "NODE_ENV:" $NODE_ENV
       - cd apps/web
-      - echo "=== BUILDING NEXT.JS ON CODEBUILD HOST (WITH VPC DATABASE ACCESS) ==="
+
+      - echo "=== INSTALLING DEPENDENCIES ==="
       - SKIP_ENV_VALIDATION=true /root/.bun/bin/bun install --frozen-lockfile
+
+      - echo "=== RUNNING DATABASE MIGRATIONS ==="
+      - echo "Running migrations before build..."
+      - /root/.bun/bin/bun run db:migrate
+      - echo "✅ Database migrations completed"
+
+      - echo "=== BUILDING NEXT.JS ON CODEBUILD HOST (WITH MIGRATED DATABASE) ==="
       - echo "Running Next.js build with database access for SSG..."
       - /root/.bun/bin/bun run build
       - echo "✅ Next.js build completed with database access"
-      
+
       - echo "=== BUILDING DOCKER IMAGE WITH BUILD ARTIFACTS ==="
       - |
         cat > Dockerfile.runtime << 'EOF'
         FROM public.ecr.aws/lambda/nodejs:18-x86_64
         WORKDIR /app
-        
+
         # Install unzip and Bun
         RUN yum update -y && yum install -y unzip && \
             curl -fsSL https://bun.sh/install | bash && \
             ln -s /root/.bun/bin/bun /usr/local/bin/bun
-        
+
         ENV NODE_ENV=production
         ENV NEXT_TELEMETRY_DISABLED=1
         ENV PORT=3000
         ENV HOSTNAME="0.0.0.0"
-        
+
         # Copy pre-built Next.js artifacts from CodeBuild host
         COPY .next/standalone ./
         COPY .next/static ./.next/static
         COPY public ./public
-        
+
         EXPOSE 3000
         CMD ["bun", "server.js"]
         EOF
-        
+
       - docker build -f Dockerfile.runtime -t $IMAGE_REPO_NAME:$IMAGE_TAG .
       - docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $REPOSITORY_URI:$IMAGE_TAG
       - docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $REPOSITORY_URI:latest

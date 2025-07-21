@@ -16,8 +16,10 @@ import { createTailscale } from "./modules/tailscale";
 // ==========================================
 const pathfinderConfig = new pulumi.Config("pathfinder");
 const enableTailscale = pathfinderConfig.getBoolean("enableTailscale") ?? false;
-const enableBetterStack = pathfinderConfig.getBoolean("enableBetterStack") ?? false;
-const enableDetailedMonitoring = pathfinderConfig.getBoolean("enableDetailedMonitoring") ?? false;
+const enableBetterStack =
+  pathfinderConfig.getBoolean("enableBetterStack") ?? false;
+const enableDetailedMonitoring =
+  pathfinderConfig.getBoolean("enableDetailedMonitoring") ?? false;
 
 // ==========================================
 // INFRASTRUCTURE CONFIGURATION
@@ -54,12 +56,14 @@ const githubOidc = createGithubOidc(config);
 // ==========================================
 
 // 8. Development Access - Tailscale Subnet Router (Optional)
-const tailscale = enableTailscale ? createTailscale(config, network, database) : undefined;
+const tailscale = enableTailscale
+  ? createTailscale(config, network, database)
+  : undefined;
 
 // 9. Observability - Better Stack + CloudWatch (Optional/Configurable)
 const monitoring = createMonitoring(config, database, container, loadBalancer, {
   enableBetterStack,
-  enableDetailedMonitoring
+  enableDetailedMonitoring,
 });
 
 // ==========================================
@@ -77,23 +81,23 @@ const applications = [
     environmentVariables: {
       NODE_ENV: "production",
       HOSTNAME: "0.0.0.0",
-      PORT: "3000"
+      PORT: "3000",
     },
     resourceRequirements: {
       cpu: 1024,
-      memory: 2048
+      memory: 2048,
     },
     scaling: {
       minInstances: 2,
       maxInstances: 10,
-      targetCpuPercent: 60
-    }
-  }
+      targetCpuPercent: 60,
+    },
+  },
 ];
 
 // Deploy configured applications
 // TODO: Implement createApplicationDeployment in build module
-const deployments = applications.map(app => 
+const deployments = applications.map((app) =>
   build.createApplicationDeployment(app, database, container)
 );
 
@@ -103,8 +107,14 @@ const deployments = applications.map(app =>
 
 // Core application URLs
 export const url = loadBalancer.applicationUrl;
+export const albDns = loadBalancer.albDnsName;
 export const applicationUrl = loadBalancer.applicationUrl;
 export const environment = config.environment;
+
+// Infrastructure details
+export const ecrRepositoryUrl = container.repositoryUrl;
+export const ecsClusterName = container.clusterName;
+export const ecsServiceName = container.serviceName;
 
 // Database connection information
 export const database_endpoint = database.endpoint;
@@ -114,21 +124,29 @@ export const database_username = database.username;
 
 // Tailscale-accessible database information (if Tailscale enabled)
 export const tailscale_enabled = enableTailscale;
-export const tailscale_database_host = enableTailscale ? database.endpoint : undefined;
-export const tailscale_database_url = enableTailscale 
+export const tailscale_database_host = enableTailscale
+  ? database.endpoint
+  : undefined;
+export const tailscale_database_url = enableTailscale
   ? pulumi.interpolate`postgresql://${database.username}:${database.password}@${database.endpoint}:5432/${database.dbName}?sslmode=require`
   : undefined;
-export const tailscale_router_ip = enableTailscale ? tailscale?.instancePrivateIp : undefined;
-export const tailscale_connection_guide = enableTailscale ? pulumi.interpolate`
+export const tailscale_router_ip = enableTailscale
+  ? tailscale?.instancePrivateIp
+  : undefined;
+export const tailscale_connection_guide = enableTailscale
+  ? pulumi.interpolate`
 # Connect to database through Tailscale:
 # 1. Ensure you're connected to Tailscale network
 # 2. Use this connection string: postgresql://${database.username}:[PASSWORD]@${database.endpoint}:5432/${database.dbName}?sslmode=require
 # 3. Get password with: pulumi stack output database_password --show-secrets
-` : "Tailscale not enabled for this environment";
+`
+  : "Tailscale not enabled for this environment";
 
 // Better Stack information (if enabled)
 export const betterstack_enabled = enableBetterStack;
-export const betterstack_lambda_arn = enableBetterStack ? monitoring.logForwarderFunctionArn : undefined;
+export const betterstack_lambda_arn = enableBetterStack
+  ? monitoring.logForwarderFunctionArn
+  : undefined;
 
 // Repository and cluster information
 export const ecr_repository_url = container.repositoryUrl;
@@ -138,4 +156,6 @@ export const databaseEndpoint = database.endpoint;
 
 // Security outputs (marked as secrets)
 export const database_password = pulumi.secret(database.password);
-export const tailscale_auth_key = enableTailscale ? pulumi.secret(tailscale?.authSecretArn) : undefined; 
+export const tailscale_auth_key = enableTailscale
+  ? pulumi.secret(tailscale?.authSecretArn)
+  : undefined;

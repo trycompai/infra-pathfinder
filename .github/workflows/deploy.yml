@@ -53,34 +53,9 @@ jobs:
       - name: Wait for infrastructure stabilization
         run: sleep 30
         
-      - name: Build migration image and run migrations
+      - name: Build and deploy application
         run: |
-          echo "🔍 Checking migration content hash and building if needed"
-          
-          MIGRATION_BUILD_ID=$(aws codebuild start-build \
-            --project-name pathfinder-migration-build \
-            --environment-variables-override name=RUN_MIGRATIONS,value=true \
-            --query 'build.id' --output text)
-          
-          echo "Migration build started: $MIGRATION_BUILD_ID"
-          
-          # Wait for migration build to complete
-          while [ "$(aws codebuild batch-get-builds --ids $MIGRATION_BUILD_ID --query 'builds[0].buildStatus' --output text)" = "IN_PROGRESS" ]; do
-            echo "Waiting for migration build and execution to complete..."
-            sleep 30
-          done
-          
-          # Check if migration succeeded
-          STATUS=$(aws codebuild batch-get-builds --ids $MIGRATION_BUILD_ID --query 'builds[0].buildStatus' --output text)
-          if [ "$STATUS" != "SUCCEEDED" ]; then
-            echo "❌ Migration build/run failed with status: $STATUS"
-            exit 1
-          fi
-          echo "✅ Migration build and execution completed successfully"
-          
-      - name: Build application image
-        run: |
-          echo "🔨 Building Next.js with database access, then packaging into Docker"
+          echo "🔨 Building application (includes migrations, Next.js build, and Docker packaging)"
           BUILD_ID=$(aws codebuild start-build \
             --project-name pathfinder-app-build \
             --query 'build.id' --output text)
@@ -99,25 +74,12 @@ jobs:
           fi
           echo "App build completed successfully"
           
-      - name: Deploy application
+      - name: Wait for deployment stabilization
         run: |
-          # Wait for ECR to process the new image
-          echo "Waiting for ECR to process new image..."
-          sleep 30
-          
-          # Update ECS service to use new image
-          aws ecs update-service \
-            --cluster pathfinder \
-            --service pathfinder-app \
-            --force-new-deployment
-          
-          echo "Application deployment started"
-          
-          # Wait for deployment to stabilize
+          echo "Waiting for ECS deployment to stabilize..."
           aws ecs wait services-stable \
             --cluster pathfinder \
             --services pathfinder-app
-          
           echo "Application deployed successfully"
           
       - name: Verify deployment

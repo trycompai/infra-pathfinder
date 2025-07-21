@@ -10,7 +10,6 @@ NC='\033[0m' # No Color
 # Configuration
 AWS_REGION=${AWS_REGION:-us-east-1}
 CLUSTER_NAME="pathfinder"
-MIGRATION_PROJECT="pathfinder-migration-build"
 APP_PROJECT="pathfinder-app-build"
 
 echo -e "${GREEN}🚀 Starting Pathfinder deployment...${NC}"
@@ -58,19 +57,8 @@ echo -e "${GREEN}✅ Infrastructure updated${NC}"
 echo -e "${YELLOW}⏳ Waiting for infrastructure to stabilize...${NC}"
 sleep 30
 
-# Step 2: Smart Migration Build (content-based verification)
-echo -e "${YELLOW}🔍 Step 2: Checking migration content hash and building if needed...${NC}"
-
-migration_build_id=$(aws codebuild start-build \
-    --project-name "$MIGRATION_PROJECT" \
-    --environment-variables-override name=RUN_MIGRATIONS,value=true \
-    --query 'build.id' --output text)
-
-echo "Migration build ID: $migration_build_id"
-wait_for_build "$migration_build_id" "Migration Build and Run"
-
-# Step 3: Build Application (Next.js with DB access, then Docker packaging)
-echo -e "${YELLOW}🔨 Step 3: Building Next.js with database access, then packaging...${NC}"
+# Step 2: Build and Deploy Application (includes migrations)
+echo -e "${YELLOW}🔨 Step 2: Building application (migrations + Next.js + Docker)...${NC}"
 app_build_id=$(aws codebuild start-build \
     --project-name "$APP_PROJECT" \
     --query 'build.id' --output text)
@@ -78,28 +66,14 @@ app_build_id=$(aws codebuild start-build \
 echo "App build ID: $app_build_id"
 wait_for_build "$app_build_id" "Application"
 
-# Step 4: Deploy Application
-echo -e "${YELLOW}🚢 Step 4: Deploying application...${NC}"
+# Step 3: Verify Deployment
+echo -e "${YELLOW}🔍 Step 3: Verifying deployment...${NC}"
 
-# Wait for ECR to process the new image
-echo -e "${YELLOW}⏳ Waiting for ECR to process new image...${NC}"
-sleep 30
-
-# Update ECS service
-aws ecs update-service \
-    --cluster "$CLUSTER_NAME" \
-    --service pathfinder-app \
-    --force-new-deployment > /dev/null
-
-echo -e "${YELLOW}⏳ Waiting for deployment to stabilize...${NC}"
+# Wait for ECS service to stabilize after the build updated it
+echo -e "${YELLOW}⏳ Waiting for ECS deployment to stabilize...${NC}"
 aws ecs wait services-stable \
     --cluster "$CLUSTER_NAME" \
     --services pathfinder-app
-
-echo -e "${GREEN}✅ Application deployed successfully${NC}"
-
-# Step 5: Verify Deployment
-echo -e "${YELLOW}🔍 Step 5: Verifying deployment...${NC}"
 
 # Get ALB DNS name
 alb_dns=$(aws elbv2 describe-load-balancers \

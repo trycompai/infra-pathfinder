@@ -1,8 +1,18 @@
 import * as aws from "@pulumi/aws";
 import * as pulumi from "@pulumi/pulumi";
-import { CommonConfig, ContainerOutputs, DatabaseOutputs, NetworkOutputs } from "../types";
+import {
+  CommonConfig,
+  ContainerOutputs,
+  DatabaseOutputs,
+  NetworkOutputs,
+} from "../types";
 
-export function createBuildSystem(config: CommonConfig, network: NetworkOutputs, database: DatabaseOutputs, container: ContainerOutputs) {
+export function createBuildSystem(
+  config: CommonConfig,
+  network: NetworkOutputs,
+  database: DatabaseOutputs,
+  container: ContainerOutputs
+) {
   const { commonTags } = config;
 
   // IAM Service Role for CodeBuild
@@ -28,71 +38,72 @@ export function createBuildSystem(config: CommonConfig, network: NetworkOutputs,
   });
 
   // CodeBuild policy for basic operations
-  const codebuildPolicy = new aws.iam.RolePolicy("pathfinder-codebuild-policy", {
-    role: codebuildRole.id,
-    policy: database.secretArn.apply(secretArn => JSON.stringify({
-      Version: "2012-10-17",
-      Statement: [
-        {
-          Effect: "Allow",
-          Action: [
-            "logs:CreateLogGroup",
-            "logs:CreateLogStream",
-            "logs:PutLogEvents",
+  const codebuildPolicy = new aws.iam.RolePolicy(
+    "pathfinder-codebuild-policy",
+    {
+      role: codebuildRole.id,
+      policy: database.secretArn.apply((secretArn) =>
+        JSON.stringify({
+          Version: "2012-10-17",
+          Statement: [
+            {
+              Effect: "Allow",
+              Action: [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents",
+              ],
+              Resource: "arn:aws:logs:*:*:*",
+            },
+            {
+              Effect: "Allow",
+              Action: [
+                "ecr:BatchCheckLayerAvailability",
+                "ecr:GetDownloadUrlForLayer",
+                "ecr:BatchGetImage",
+                "ecr:GetAuthorizationToken",
+                "ecr:PutImage",
+                "ecr:InitiateLayerUpload",
+                "ecr:UploadLayerPart",
+                "ecr:CompleteLayerUpload",
+              ],
+              Resource: "*",
+            },
+            {
+              Effect: "Allow",
+              Action: [
+                "ec2:CreateNetworkInterface",
+                "ec2:DescribeDhcpOptions",
+                "ec2:DescribeNetworkInterfaces",
+                "ec2:DeleteNetworkInterface",
+                "ec2:DescribeSubnets",
+                "ec2:DescribeSecurityGroups",
+                "ec2:DescribeVpcs",
+              ],
+              Resource: "*",
+            },
+            {
+              Effect: "Allow",
+              Action: ["ec2:CreateNetworkInterfacePermission"],
+              Resource: "*",
+            },
+            {
+              Effect: "Allow",
+              Action: [
+                "secretsmanager:GetSecretValue",
+                "secretsmanager:DescribeSecret",
+              ],
+              Resource: secretArn,
+            },
           ],
-          Resource: "arn:aws:logs:*:*:*",
-        },
-        {
-          Effect: "Allow",
-          Action: [
-            "ecr:BatchCheckLayerAvailability",
-            "ecr:GetDownloadUrlForLayer",
-            "ecr:BatchGetImage",
-            "ecr:GetAuthorizationToken",
-            "ecr:PutImage",
-            "ecr:InitiateLayerUpload",
-            "ecr:UploadLayerPart",
-            "ecr:CompleteLayerUpload",
-          ],
-          Resource: "*",
-        },
-        {
-          Effect: "Allow",
-          Action: [
-            "ec2:CreateNetworkInterface",
-            "ec2:DescribeDhcpOptions",
-            "ec2:DescribeNetworkInterfaces",
-            "ec2:DeleteNetworkInterface",
-            "ec2:DescribeSubnets",
-            "ec2:DescribeSecurityGroups",
-            "ec2:DescribeVpcs",
-          ],
-          Resource: "*",
-        },
-        {
-          Effect: "Allow",
-          Action: [
-            "ec2:CreateNetworkInterfacePermission",
-          ],
-          Resource: "*",
-        },
-        {
-          Effect: "Allow",
-          Action: [
-            "secretsmanager:GetSecretValue",
-            "secretsmanager:DescribeSecret",
-          ],
-          Resource: secretArn,
-        },
-      ],
-    })),
-  });
-
-
+        })
+      ),
+    }
+  );
 
   // CodeBuild project for building application image (requires database access)
   const appProject = new aws.codebuild.Project("pathfinder-app-build", {
-    name: "pathfinder-app-build", 
+    name: "pathfinder-app-build",
     description: "Build application Docker image with database access",
     serviceRole: codebuildRole.arn,
     artifacts: {
@@ -144,7 +155,7 @@ export function createBuildSystem(config: CommonConfig, network: NetworkOutputs,
           value: process.env.NODE_ENV || "production",
           type: "PLAINTEXT",
         },
-            ],
+      ],
     },
     vpcConfig: {
       vpcId: network.vpcId,
@@ -165,92 +176,38 @@ export function createBuildSystem(config: CommonConfig, network: NetworkOutputs,
     },
   });
 
-  // CodeBuild project for building migration image (with database access for running migrations)
-  const migrationProject = new aws.codebuild.Project("pathfinder-migration-build", {
-    name: "pathfinder-migration-build",
-    description: "Build migration Docker image and run migrations",
-    serviceRole: codebuildRole.arn,
-    artifacts: {
-      type: "NO_ARTIFACTS",
-    },
-    environment: {
-      computeType: "BUILD_GENERAL1_MEDIUM",
-      image: "aws/codebuild/standard:7.0",
-      type: "LINUX_CONTAINER",
-      privilegedMode: true, // Required for Docker builds
-      environmentVariables: [
-        {
-          name: "AWS_ACCOUNT_ID",
-          value: aws.getCallerIdentityOutput().accountId,
-          type: "PLAINTEXT",
-        },
-        {
-          name: "IMAGE_REPO_NAME",
-          value: "pathfinder",
-          type: "PLAINTEXT",
-        },
-        {
-          name: "DATABASE_URL",
-          value: database.connectionString,
-          type: "PLAINTEXT",
-        },
-        {
-          name: "AWS_DEFAULT_REGION",
-          value: config.awsRegion,
-          type: "PLAINTEXT",
-        },
-      ],
-    },
-    // Add VPC config for database access
-    vpcConfig: {
-      vpcId: network.vpcId,
-      subnets: network.privateSubnetIds,
-      securityGroupIds: [network.securityGroups.codeBuild],
-    },
-    source: {
-      type: "GITHUB",
-      location: `https://github.com/${config.githubOrg}/${config.githubRepo}.git`,
-      buildspec: "apps/web/buildspec-migration.yml",
-      gitCloneDepth: 1,
-    },
-    tags: {
-      ...commonTags,
-      Name: "pathfinder-migration-build",
-      Type: "codebuild-project",
-      Purpose: "migration-image-build",
-    },
-  });
-
   // Additional IAM permissions for ECS deployment
-  const ecsDeployPolicy = new aws.iam.RolePolicy("pathfinder-ecs-deploy-policy", {
-    role: codebuildRole.id,
-    policy: pulumi.all([container.taskExecutionRoleArn, container.taskRoleArn]).apply(([taskExecRoleArn, taskRoleArn]: [string, string]) => JSON.stringify({
-      Version: "2012-10-17",
-      Statement: [
-        {
-          Effect: "Allow",
-          Action: [
-            "ecs:UpdateService",
-            "ecs:DescribeServices",
-            "ecs:DescribeTasks",
-            "ecs:DescribeTaskDefinition",
-            "ecs:RegisterTaskDefinition",
-          ],
-          Resource: "*",
-        },
-        {
-          Effect: "Allow",
-          Action: [
-            "iam:PassRole",
-          ],
-          Resource: [
-            taskExecRoleArn,
-            taskRoleArn,
-          ],
-        },
-      ],
-    })),
-  });
+  const ecsDeployPolicy = new aws.iam.RolePolicy(
+    "pathfinder-ecs-deploy-policy",
+    {
+      role: codebuildRole.id,
+      policy: pulumi
+        .all([container.taskExecutionRoleArn, container.taskRoleArn])
+        .apply(([taskExecRoleArn, taskRoleArn]: [string, string]) =>
+          JSON.stringify({
+            Version: "2012-10-17",
+            Statement: [
+              {
+                Effect: "Allow",
+                Action: [
+                  "ecs:UpdateService",
+                  "ecs:DescribeServices",
+                  "ecs:DescribeTasks",
+                  "ecs:DescribeTaskDefinition",
+                  "ecs:RegisterTaskDefinition",
+                ],
+                Resource: "*",
+              },
+              {
+                Effect: "Allow",
+                Action: ["iam:PassRole"],
+                Resource: [taskExecRoleArn, taskRoleArn],
+              },
+            ],
+          })
+        ),
+    }
+  );
 
   // Application deployment function
   function createApplicationDeployment(
@@ -263,7 +220,11 @@ export function createBuildSystem(config: CommonConfig, network: NetworkOutputs,
       healthCheckPath: string;
       environmentVariables: Record<string, string>;
       resourceRequirements: { cpu: number; memory: number };
-      scaling: { minInstances: number; maxInstances: number; targetCpuPercent: number };
+      scaling: {
+        minInstances: number;
+        maxInstances: number;
+        targetCpuPercent: number;
+      };
     },
     database: DatabaseOutputs,
     container: ContainerOutputs
@@ -290,11 +251,9 @@ export function createBuildSystem(config: CommonConfig, network: NetworkOutputs,
   return {
     appProjectName: appProject.name,
     appProjectArn: appProject.arn,
-    migrationProjectName: migrationProject.name,
-    migrationProjectArn: migrationProject.arn,
     codebuildRoleArn: codebuildRole.arn,
     buildInstanceType: "BUILD_GENERAL1_MEDIUM",
     buildTimeout: 20,
     createApplicationDeployment,
   };
-} 
+}
