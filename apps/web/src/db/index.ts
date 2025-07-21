@@ -1,6 +1,6 @@
-import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { env } from "../env";
+import { PrismaClient } from "../generated/client";
 
 // Create the adapter with connection string
 const adapter = new PrismaPg({
@@ -23,4 +23,4 @@ export const prisma =
 if (env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
 // Export the types from Prisma client
-export * from "@prisma/client";
+export * from "../generated/client";

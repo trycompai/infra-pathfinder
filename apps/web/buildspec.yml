@@ -50,6 +50,12 @@ phases:
       - ls -la .next/standalone/public/ || echo "❌ .next/standalone/public/ not found"
       - ls -la .next/standalone/server.js || echo "❌ server.js not found"
 
+      - echo "=== COPYING PRISMA CLIENT FOR RUNTIME ==="
+      - echo "Copying generated Prisma client to standalone build..."
+      - mkdir -p .next/standalone/src/generated
+      - cp -r src/generated/client .next/standalone/src/generated/ || echo "Warning: Custom Prisma client not found"
+      - echo "✅ Prisma client copied to standalone build"
+
       - echo "=== BUILDING DOCKER IMAGE WITH BUILD ARTIFACTS ==="
       # Note: We're using a simplified runtime Dockerfile here because the build artifacts
       # are already created. For local development or standard CI/CD, use the main Dockerfile
@@ -66,7 +72,7 @@ phases:
         ENV PORT=3000
         ENV HOSTNAME="0.0.0.0"
 
-        # Copy the complete standalone build
+        # Copy the complete standalone build (includes Prisma client)
         COPY .next/standalone ./
 
         # Create non-root user for security

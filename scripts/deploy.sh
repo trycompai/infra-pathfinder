@@ -69,7 +69,35 @@ echo -e "${YELLOW}🔍 Step 3: Verifying deployment...${NC}"
 echo -e "${YELLOW}⏳ Waiting for ECS deployment to stabilize...${NC}"
 
 # Set a timeout of 10 minutes (600 seconds) for the wait
-if ! timeout 600 aws ecs wait services-stable \
+# Use a cross-platform timeout implementation
+wait_with_timeout() {
+    local timeout_duration=$1
+    shift
+    local command=("$@")
+    
+    # Start the command in the background
+    "${command[@]}" &
+    local cmd_pid=$!
+    
+    # Wait for either the command to complete or timeout
+    local count=0
+    while kill -0 "$cmd_pid" 2>/dev/null && [ $count -lt $timeout_duration ]; do
+        sleep 1
+        ((count++))
+    done
+    
+    # Check if command is still running (timed out)
+    if kill -0 "$cmd_pid" 2>/dev/null; then
+        kill "$cmd_pid" 2>/dev/null
+        wait "$cmd_pid" 2>/dev/null
+        return 1  # Timeout occurred
+    else
+        wait "$cmd_pid"
+        return $?  # Return the command's exit status
+    fi
+}
+
+if ! wait_with_timeout 600 aws ecs wait services-stable \
     --cluster "$CLUSTER_NAME" \
     --services pathfinder; then
     
