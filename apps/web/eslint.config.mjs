@@ -14,7 +14,8 @@ const eslintConfig = [
   {
     ignores: [
       // Exclude generated Prisma client from linting
-      "src/generated/**/*",
+      "node_modules/.prisma/**/*",
+      "node_modules/@prisma/client/**/*",
       // Exclude other build artifacts
       ".next/**/*",
       "out/**/*",
