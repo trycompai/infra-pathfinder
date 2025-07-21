@@ -39,30 +39,37 @@ export function createDatabase(config: CommonConfig, network: NetworkOutputs) {
   });
 
   // Enhanced monitoring role for RDS
-  const enhancedMonitoringRole = new aws.iam.Role("pathfinder-rds-monitoring-role", {
-    assumeRolePolicy: JSON.stringify({
-      Version: "2012-10-17",
-      Statement: [
-        {
-          Action: "sts:AssumeRole",
-          Effect: "Allow",
-          Principal: {
-            Service: "monitoring.rds.amazonaws.com",
+  const enhancedMonitoringRole = new aws.iam.Role(
+    "pathfinder-rds-monitoring-role",
+    {
+      assumeRolePolicy: JSON.stringify({
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Action: "sts:AssumeRole",
+            Effect: "Allow",
+            Principal: {
+              Service: "monitoring.rds.amazonaws.com",
+            },
           },
-        },
-      ],
-    }),
-    tags: {
-      ...commonTags,
-      Name: "pathfinder-rds-monitoring-role",
-      Type: "iam-role",
-    },
-  });
+        ],
+      }),
+      tags: {
+        ...commonTags,
+        Name: "pathfinder-rds-monitoring-role",
+        Type: "iam-role",
+      },
+    }
+  );
 
-  const enhancedMonitoringRoleAttachment = new aws.iam.RolePolicyAttachment("pathfinder-rds-monitoring-policy", {
-    role: enhancedMonitoringRole.name,
-    policyArn: "arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole",
-  });
+  const enhancedMonitoringRoleAttachment = new aws.iam.RolePolicyAttachment(
+    "pathfinder-rds-monitoring-policy",
+    {
+      role: enhancedMonitoringRole.name,
+      policyArn:
+        "arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole",
+    }
+  );
 
   // DB parameter group for PostgreSQL optimization
   const dbParameterGroup = new aws.rds.ParameterGroup("pathfinder-db-params", {
@@ -90,7 +97,7 @@ export function createDatabase(config: CommonConfig, network: NetworkOutputs) {
   });
 
   // Primary RDS instance in private subnets
-  const dbInstance = new aws.rds.Instance("pathfinder-database", {
+  const dbInstance = new aws.rds.Instance("pathfinder-database-v2", {
     engine: "postgres",
     engineVersion: "15.8",
     instanceClass: config.dbInstanceClass || "db.t3.micro",
@@ -98,33 +105,35 @@ export function createDatabase(config: CommonConfig, network: NetworkOutputs) {
     maxAllocatedStorage: config.dbMaxAllocatedStorage || 100,
     storageType: "gp3",
     storageEncrypted: true,
-    
+
     dbName: "pathfinder",
     username: "pathfinder_admin",
     password: dbPassword.result,
-    
+
     vpcSecurityGroupIds: [network.securityGroups.database],
     dbSubnetGroupName: dbSubnetGroup.name,
     parameterGroupName: dbParameterGroup.name,
-    
+
     publiclyAccessible: false, // Critical: no public access
     multiAz: config.environment === "prod",
-    
+
     backupRetentionPeriod: config.dbBackupRetentionPeriod || 7,
     backupWindow: "03:00-04:00",
     maintenanceWindow: "Sun:04:00-Sun:05:00",
-    
+
     deletionProtection: config.dbDeletionProtection || false,
     skipFinalSnapshot: !config.dbDeletionProtection,
-    finalSnapshotIdentifier: config.dbDeletionProtection ? "pathfinder-final-snapshot" : undefined,
-    
+    finalSnapshotIdentifier: config.dbDeletionProtection
+      ? "pathfinder-final-snapshot"
+      : undefined,
+
     monitoringInterval: 60,
     monitoringRoleArn: enhancedMonitoringRole.arn,
     enabledCloudwatchLogsExports: ["postgresql"],
-    
+
     performanceInsightsEnabled: true,
     performanceInsightsRetentionPeriod: 7,
-    
+
     tags: {
       ...commonTags,
       Name: "pathfinder-database",
@@ -133,28 +142,35 @@ export function createDatabase(config: CommonConfig, network: NetworkOutputs) {
   });
 
   // Store the complete DATABASE_URL in the secret after instance is created
-  const dbSecretVersion = new aws.secretsmanager.SecretVersion("pathfinder-db-secret-version", {
-    secretId: dbSecret.id,
-    secretString: dbInstance.endpoint.apply(endpoint => 
-      `postgresql://pathfinder_admin:${dbPassword.result}@${endpoint}:5432/pathfinder?sslmode=require`
-    ),
-  });
+  const dbSecretVersion = new aws.secretsmanager.SecretVersion(
+    "pathfinder-db-secret-version",
+    {
+      secretId: dbSecret.id,
+      secretString: dbInstance.endpoint.apply(
+        (endpoint) =>
+          `postgresql://pathfinder_admin:${dbPassword.result}@${endpoint}:5432/pathfinder?sslmode=require`
+      ),
+    }
+  );
 
   // Read replica for production environment
-  const readReplica = config.environment === "prod" ? new aws.rds.Instance("pathfinder-db-read-replica", {
-    replicateSourceDb: dbInstance.id,
-    instanceClass: config.dbInstanceClass || "db.t3.micro",
-    publiclyAccessible: false,
-    
-    monitoringInterval: 60,
-    monitoringRoleArn: enhancedMonitoringRole.arn,
-    
-    tags: {
-      ...commonTags,
-      Name: "pathfinder-db-read-replica",
-      Type: "rds-read-replica",
-    },
-  }) : undefined;
+  const readReplica =
+    config.environment === "prod"
+      ? new aws.rds.Instance("pathfinder-db-read-replica", {
+          replicateSourceDb: dbInstance.id,
+          instanceClass: config.dbInstanceClass || "db.t3.micro",
+          publiclyAccessible: false,
+
+          monitoringInterval: 60,
+          monitoringRoleArn: enhancedMonitoringRole.arn,
+
+          tags: {
+            ...commonTags,
+            Name: "pathfinder-db-read-replica",
+            Type: "rds-read-replica",
+          },
+        })
+      : undefined;
 
   // CloudWatch log group for database logs
   const dbLogGroup = new aws.cloudwatch.LogGroup("pathfinder-db-logs", {
@@ -168,25 +184,28 @@ export function createDatabase(config: CommonConfig, network: NetworkOutputs) {
   });
 
   // Database connection alarms
-  const dbConnectionAlarm = new aws.cloudwatch.MetricAlarm("pathfinder-db-connection-alarm", {
-    name: "pathfinder-database-high-connections",
-    comparisonOperator: "GreaterThanThreshold",
-    evaluationPeriods: 2,
-    metricName: "DatabaseConnections",
-    namespace: "AWS/RDS",
-    period: 300,
-    statistic: "Average",
-    threshold: 40,
-    treatMissingData: "notBreaching",
-    dimensions: {
-      DBInstanceIdentifier: dbInstance.id,
-    },
-    tags: {
-      ...commonTags,
-      Name: "pathfinder-db-connection-alarm",
-      Type: "cloudwatch-alarm",
-    },
-  });
+  const dbConnectionAlarm = new aws.cloudwatch.MetricAlarm(
+    "pathfinder-db-connection-alarm",
+    {
+      name: "pathfinder-database-high-connections",
+      comparisonOperator: "GreaterThanThreshold",
+      evaluationPeriods: 2,
+      metricName: "DatabaseConnections",
+      namespace: "AWS/RDS",
+      period: 300,
+      statistic: "Average",
+      threshold: 40,
+      treatMissingData: "notBreaching",
+      dimensions: {
+        DBInstanceIdentifier: dbInstance.id,
+      },
+      tags: {
+        ...commonTags,
+        Name: "pathfinder-db-connection-alarm",
+        Type: "cloudwatch-alarm",
+      },
+    }
+  );
 
   const dbCpuAlarm = new aws.cloudwatch.MetricAlarm("pathfinder-db-cpu-alarm", {
     name: "pathfinder-database-high-cpu",
@@ -224,4 +243,4 @@ export function createDatabase(config: CommonConfig, network: NetworkOutputs) {
     connectionAlarmArn: dbConnectionAlarm.arn,
     cpuAlarmArn: dbCpuAlarm.arn,
   };
-} 
+}

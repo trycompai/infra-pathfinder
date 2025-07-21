@@ -35,8 +35,13 @@ export async function PUT(
       success: true,
       data: updatedTodo,
     });
-  } catch (error: any) {
-    if (error?.code === "P2025") {
+  } catch (error) {
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "P2025"
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -75,8 +80,13 @@ export async function DELETE(
       success: true,
       message: "Todo deleted successfully",
     });
-  } catch (error: any) {
-    if (error?.code === "P2025") {
+  } catch (error) {
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "P2025"
+    ) {
       return NextResponse.json(
         {
           success: false,

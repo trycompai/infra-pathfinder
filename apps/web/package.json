@@ -18,9 +18,10 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@t3-oss/env-nextjs": "^0.13.8",
-    "@prisma/client": "^6.7.0",
     "@prisma/adapter-pg": "^6.7.0",
+    "@prisma/client": "^6.7.0",
+    "@t3-oss/env-nextjs": "^0.13.8",
+    "@tailwindcss/postcss": "^4.1.11",
     "axios": "^1.10.0",
     "dotenv": "^17.1.0",
     "next": "15.3.5",
@@ -32,14 +33,14 @@
   },
   "devDependencies": {
     "prisma": "^6.7.0",
+    "postcss": "^8.4.39",
+    "tailwindcss": "^4.0.8",
     "@types/node": "^22.5.4",
     "@types/pg": "^8.11.10",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
     "eslint": "^9.9.0",
     "eslint-config-next": "^15.1.2",
-    "postcss": "^8.4.39",
-    "tailwindcss": "^4.0.8",
     "typescript": "^5.5.3"
   }
 }
