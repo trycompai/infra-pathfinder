@@ -9,12 +9,15 @@ export function createConfig(): CommonConfig {
   const stack = pulumi.getStack(); // dev, staging, prod
   const projectName = pulumi.getProject();
   const pathfinderConfig = new pulumi.Config("pathfinder");
-  
+
   // Feature flags
-  const enableTailscale = pathfinderConfig.getBoolean("enableTailscale") ?? false;
-  const enableBetterStack = pathfinderConfig.getBoolean("enableBetterStack") ?? false;
-  const enableDetailedMonitoring = pathfinderConfig.getBoolean("enableDetailedMonitoring") ?? false;
-  
+  const enableTailscale =
+    pathfinderConfig.getBoolean("enableTailscale") ?? false;
+  const enableBetterStack =
+    pathfinderConfig.getBoolean("enableBetterStack") ?? false;
+  const enableDetailedMonitoring =
+    pathfinderConfig.getBoolean("enableDetailedMonitoring") ?? false;
+
   // Base configuration applicable to all environments
   const baseConfig = {
     projectName,
@@ -31,87 +34,125 @@ export function createConfig(): CommonConfig {
       Environment: stack,
       ManagedBy: "pulumi",
       Owner: "platform-team",
-      CreatedDate: new Date().toISOString().split('T')[0]
-    }
+      CreatedDate: new Date().toISOString().split("T")[0],
+    },
   };
 
   // Environment-specific configurations
   const environmentConfigs = {
-    dev: {
+    "compai/test-mariano": {
       database: {
         instanceClass: "db.t3.small",
         allocatedStorage: 20,
         maxAllocatedStorage: 100,
         deletionProtection: false,
-        backupRetentionPeriod: 3
+        backupRetentionPeriod: 3,
       },
       scaling: {
         minCapacity: 1,
         maxCapacity: 3,
-        targetCpuUtilization: 70
+        targetCpuUtilization: 70,
       },
       tailscale: {
-        instanceType: "t3.nano"
+        instanceType: "t3.nano",
       },
       monitoring: {
         logRetentionDays: 3,
-        detailedMonitoring: false
+        detailedMonitoring: false,
       },
       networking: {
         vpcCidr: "10.0.0.0/16",
         subnets: {
           public: [
             { cidr: "10.0.1.0/24", az: 0 },
-            { cidr: "10.0.2.0/24", az: 1 }
+            { cidr: "10.0.2.0/24", az: 1 },
           ],
           private: [
             { cidr: "10.0.10.0/24", az: 0 },
-            { cidr: "10.0.20.0/24", az: 1 }
-          ]
-        }
+            { cidr: "10.0.20.0/24", az: 1 },
+          ],
+        },
       },
       security: {
         allowedCidrBlocks: ["0.0.0.0/0"],
-        enableWaf: false
-      }
+        enableWaf: false,
+      },
+    },
+    dev: {
+      database: {
+        instanceClass: "db.t3.small",
+        allocatedStorage: 20,
+        maxAllocatedStorage: 100,
+        deletionProtection: false,
+        backupRetentionPeriod: 3,
+      },
+      scaling: {
+        minCapacity: 1,
+        maxCapacity: 3,
+        targetCpuUtilization: 70,
+      },
+      tailscale: {
+        instanceType: "t3.nano",
+      },
+      monitoring: {
+        logRetentionDays: 3,
+        detailedMonitoring: false,
+      },
+      networking: {
+        vpcCidr: "10.0.0.0/16",
+        subnets: {
+          public: [
+            { cidr: "10.0.1.0/24", az: 0 },
+            { cidr: "10.0.2.0/24", az: 1 },
+          ],
+          private: [
+            { cidr: "10.0.10.0/24", az: 0 },
+            { cidr: "10.0.20.0/24", az: 1 },
+          ],
+        },
+      },
+      security: {
+        allowedCidrBlocks: ["0.0.0.0/0"],
+        enableWaf: false,
+      },
     },
     staging: {
       database: {
-        instanceClass: "db.t3.small", 
+        instanceClass: "db.t3.small",
         allocatedStorage: 50,
         maxAllocatedStorage: 200,
         deletionProtection: false,
-        backupRetentionPeriod: 7
+        backupRetentionPeriod: 7,
       },
       scaling: {
         minCapacity: 2,
         maxCapacity: 5,
-        targetCpuUtilization: 60
+        targetCpuUtilization: 60,
       },
       tailscale: {
-        instanceType: "t3.nano"
+        instanceType: "t3.nano",
       },
       monitoring: {
         logRetentionDays: 7,
-        detailedMonitoring: true
+        detailedMonitoring: true,
       },
       networking: {
         vpcCidr: "10.1.0.0/16",
         subnets: {
           public: [
             { cidr: "10.1.1.0/24", az: 0 },
-            { cidr: "10.1.2.0/24", az: 1 }
+            { cidr: "10.1.2.0/24", az: 1 },
           ],
           private: [
             { cidr: "10.1.10.0/24", az: 0 },
-            { cidr: "10.1.20.0/24", az: 1 }
-          ]
-        }
+            { cidr: "10.1.20.0/24", az: 1 },
+          ],
+        },
       },
       security: {
         allowedCidrBlocks: ["0.0.0.0/0"],
-        enableWaf: true
-      }
+        enableWaf: true,
+      },
     },
     prod: {
       database: {
@@ -119,41 +160,43 @@ export function createConfig(): CommonConfig {
         allocatedStorage: 100,
         maxAllocatedStorage: 1000,
         deletionProtection: true,
-        backupRetentionPeriod: 30
+        backupRetentionPeriod: 30,
       },
       scaling: {
         minCapacity: 3,
         maxCapacity: 20,
-        targetCpuUtilization: 50
+        targetCpuUtilization: 50,
       },
       tailscale: {
-        instanceType: "t3.small"  // Slightly larger for prod
+        instanceType: "t3.small", // Slightly larger for prod
       },
       monitoring: {
         logRetentionDays: 30,
-        detailedMonitoring: true
+        detailedMonitoring: true,
       },
       networking: {
         vpcCidr: "10.2.0.0/16",
         subnets: {
           public: [
             { cidr: "10.2.1.0/24", az: 0 },
-            { cidr: "10.2.2.0/24", az: 1 }
+            { cidr: "10.2.2.0/24", az: 1 },
           ],
           private: [
             { cidr: "10.2.10.0/24", az: 0 },
-            { cidr: "10.2.20.0/24", az: 1 }
-          ]
-        }
+            { cidr: "10.2.20.0/24", az: 1 },
+          ],
+        },
       },
       security: {
         allowedCidrBlocks: ["0.0.0.0/0"],
-        enableWaf: true
-      }
-    }
+        enableWaf: true,
+      },
+    },
   };
 
-  const envConfig = environmentConfigs[stack as keyof typeof environmentConfigs] || environmentConfigs.dev;
+  const envConfig =
+    environmentConfigs[stack as keyof typeof environmentConfigs] ||
+    environmentConfigs.dev;
 
   return {
     ...baseConfig,
@@ -166,18 +209,30 @@ export function createConfig(): CommonConfig {
     logRetentionDays: envConfig.monitoring.logRetentionDays,
     networkConfig: envConfig.networking,
     securityConfig: envConfig.security,
-    
+
     // Load sensitive configuration from Pulumi config (only if features enabled)
-    tailscale: enableTailscale ? {
-      apiKey: new pulumi.Config("tailscale").getSecret("apiKey") || pulumi.output("NOT_SET"),
-      tailnet: new pulumi.Config("tailscale").get("tailnet") || "NOT_SET",
-      authKey: new pulumi.Config("tailscale").getSecret("authKey") || pulumi.output("NOT_SET")
-    } : undefined,
-    betterStack: enableBetterStack ? {
-      entrypoint: new pulumi.Config("betterstack").getSecret("entrypoint") || pulumi.output("NOT_SET"),
-      sourceToken: new pulumi.Config("betterstack").getSecret("sourceToken") || pulumi.output("NOT_SET")
-    } : undefined
+    tailscale: enableTailscale
+      ? {
+          apiKey:
+            new pulumi.Config("tailscale").getSecret("apiKey") ||
+            pulumi.output("NOT_SET"),
+          tailnet: new pulumi.Config("tailscale").get("tailnet") || "NOT_SET",
+          authKey:
+            new pulumi.Config("tailscale").getSecret("authKey") ||
+            pulumi.output("NOT_SET"),
+        }
+      : undefined,
+    betterStack: enableBetterStack
+      ? {
+          entrypoint:
+            new pulumi.Config("betterstack").getSecret("entrypoint") ||
+            pulumi.output("NOT_SET"),
+          sourceToken:
+            new pulumi.Config("betterstack").getSecret("sourceToken") ||
+            pulumi.output("NOT_SET"),
+        }
+      : undefined,
   };
 }
 
-// Removed duplicate feature flags - they're now handled in createConfig() function 
+// Removed duplicate feature flags - they're now handled in createConfig() function

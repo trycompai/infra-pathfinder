@@ -49,7 +49,7 @@ wait_for_build() {
 # Step 1: Update Infrastructure
 echo -e "${YELLOW}📋 Step 1: Updating infrastructure...${NC}"
 cd apps/infra
-export NODE_ENV=development  # Required for buildspec
+export NODE_ENV=production
 pulumi up --yes
 cd ../..
 echo -e "${GREEN}✅ Infrastructure updated${NC}"

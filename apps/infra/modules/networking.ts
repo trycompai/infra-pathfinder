@@ -12,7 +12,7 @@ export function createNetworking(config: CommonConfig) {
   const vpc = new aws.ec2.Vpc("pathfinder-vpc", {
     cidrBlock: networkConfig.vpcCidr,
     enableDnsHostnames: true, // Required for RDS and ALB
-    enableDnsSupport: true,   // Required for RDS and ALB
+    enableDnsSupport: true, // Required for RDS and ALB
     tags: {
       ...commonTags,
       Name: "pathfinder-vpc",
@@ -40,40 +40,46 @@ export function createNetworking(config: CommonConfig) {
   // ==========================================
 
   // Public subnets (for ALB, NAT Gateway, and Tailscale)
-  const publicSubnets = networkConfig.subnets.public.map((subnet, index) => 
-    new aws.ec2.Subnet(`pathfinder-public-subnet-${index + 1}`, {
-      vpcId: vpc.id,
-      cidrBlock: subnet.cidr,
-      availabilityZone: availabilityZones.apply(azs => azs.names[subnet.az]),
-      mapPublicIpOnLaunch: true,
-      tags: {
-        ...commonTags,
-        Name: `pathfinder-public-subnet-${index + 1}`,
-        Type: "public",
-        Tier: "public",
-      },
-    })
+  const publicSubnets = networkConfig.subnets.public.map(
+    (subnet, index) =>
+      new aws.ec2.Subnet(`pathfinder-public-subnet-${index + 1}`, {
+        vpcId: vpc.id,
+        cidrBlock: subnet.cidr,
+        availabilityZone: availabilityZones.apply(
+          (azs) => azs.names[subnet.az]
+        ),
+        mapPublicIpOnLaunch: true,
+        tags: {
+          ...commonTags,
+          Name: `pathfinder-public-subnet-${index + 1}`,
+          Type: "public",
+          Tier: "public",
+        },
+      })
   );
 
   // Private subnets (for RDS, ECS, and internal services)
-  const privateSubnets = networkConfig.subnets.private.map((subnet, index) =>
-    new aws.ec2.Subnet(`pathfinder-private-subnet-${index + 1}`, {
-      vpcId: vpc.id,
-      cidrBlock: subnet.cidr,
-      availabilityZone: availabilityZones.apply(azs => azs.names[subnet.az]),
-      mapPublicIpOnLaunch: false, // Private subnets don't auto-assign public IPs
-      tags: {
-        ...commonTags,
-        Name: `pathfinder-private-subnet-${index + 1}`,
-        Type: "private",
-        Tier: "private",
-      },
-    })
+  const privateSubnets = networkConfig.subnets.private.map(
+    (subnet, index) =>
+      new aws.ec2.Subnet(`pathfinder-private-subnet-${index + 1}`, {
+        vpcId: vpc.id,
+        cidrBlock: subnet.cidr,
+        availabilityZone: availabilityZones.apply(
+          (azs) => azs.names[subnet.az]
+        ),
+        mapPublicIpOnLaunch: false, // Private subnets don't auto-assign public IPs
+        tags: {
+          ...commonTags,
+          Name: `pathfinder-private-subnet-${index + 1}`,
+          Type: "private",
+          Tier: "private",
+        },
+      })
   );
 
   // Extract subnet IDs for use in other resources
-  const publicSubnetIds = publicSubnets.map(subnet => subnet.id);
-  const privateSubnetIds = privateSubnets.map(subnet => subnet.id);
+  const publicSubnetIds = publicSubnets.map((subnet) => subnet.id);
+  const privateSubnetIds = privateSubnets.map((subnet) => subnet.id);
 
   // ==========================================
   // NAT GATEWAY FOR PRIVATE SUBNET INTERNET ACCESS
@@ -121,11 +127,12 @@ export function createNetworking(config: CommonConfig) {
   });
 
   // Associate public subnets with public route table
-  publicSubnets.map((subnet, index) =>
-    new aws.ec2.RouteTableAssociation(`pathfinder-public-rta-${index + 1}`, {
-      subnetId: subnet.id,
-      routeTableId: publicRouteTable.id,
-    })
+  publicSubnets.map(
+    (subnet, index) =>
+      new aws.ec2.RouteTableAssociation(`pathfinder-public-rta-${index + 1}`, {
+        subnetId: subnet.id,
+        routeTableId: publicRouteTable.id,
+      })
   );
 
   // Private route table
@@ -147,11 +154,12 @@ export function createNetworking(config: CommonConfig) {
   });
 
   // Associate private subnets with private route table
-  privateSubnets.map((subnet, index) =>
-    new aws.ec2.RouteTableAssociation(`pathfinder-private-rta-${index + 1}`, {
-      subnetId: subnet.id,
-      routeTableId: privateRouteTable.id,
-    })
+  privateSubnets.map(
+    (subnet, index) =>
+      new aws.ec2.RouteTableAssociation(`pathfinder-private-rta-${index + 1}`, {
+        subnetId: subnet.id,
+        routeTableId: privateRouteTable.id,
+      })
   );
 
   // ==========================================
@@ -256,84 +264,96 @@ export function createNetworking(config: CommonConfig) {
   });
 
   // CodeBuild Security Group
-  const codeBuildSecurityGroup = new aws.ec2.SecurityGroup("pathfinder-codebuild-sg", {
-    vpcId: vpc.id,
-    description: "Security group for CodeBuild projects",
-    egress: [
-      {
-        protocol: "-1",
-        fromPort: 0,
-        toPort: 0,
-        cidrBlocks: ["0.0.0.0/0"],
-        description: "Full outbound access for builds",
+  const codeBuildSecurityGroup = new aws.ec2.SecurityGroup(
+    "pathfinder-codebuild-sg",
+    {
+      vpcId: vpc.id,
+      description: "Security group for CodeBuild projects",
+      egress: [
+        {
+          protocol: "-1",
+          fromPort: 0,
+          toPort: 0,
+          cidrBlocks: ["0.0.0.0/0"],
+          description: "Full outbound access for builds",
+        },
+      ],
+      tags: {
+        ...commonTags,
+        Name: "pathfinder-codebuild-sg",
+        Type: "security-group",
+        Tier: "private",
       },
-    ],
-    tags: {
-      ...commonTags,
-      Name: "pathfinder-codebuild-sg",
-      Type: "security-group",
-      Tier: "private",
-    },
-  });
+    }
+  );
 
   // Allow CodeBuild to access database
-  const buildDatabaseAccess = new aws.ec2.SecurityGroupRule("build-database-access", {
-    type: "ingress",
-    fromPort: 5432,
-    toPort: 5432,
-    protocol: "tcp",
-    sourceSecurityGroupId: codeBuildSecurityGroup.id,
-    securityGroupId: databaseSecurityGroup.id,
-    description: "Allow CodeBuild to access database for builds",
-  });
+  const buildDatabaseAccess = new aws.ec2.SecurityGroupRule(
+    "build-database-access",
+    {
+      type: "ingress",
+      fromPort: 5432,
+      toPort: 5432,
+      protocol: "tcp",
+      sourceSecurityGroupId: codeBuildSecurityGroup.id,
+      securityGroupId: databaseSecurityGroup.id,
+      description: "Allow CodeBuild to access database for builds",
+    }
+  );
 
   // Tailscale Security Group
-  const tailscaleSecurityGroup = new aws.ec2.SecurityGroup("pathfinder-tailscale-sg", {
-    vpcId: vpc.id,
-    description: "Security group for Tailscale subnet router",
-    ingress: [
-      {
-        protocol: "tcp",
-        fromPort: 22,
-        toPort: 22,
-        cidrBlocks: securityConfig.allowedCidrBlocks,
-        description: "SSH access from allowed IPs",
+  const tailscaleSecurityGroup = new aws.ec2.SecurityGroup(
+    "pathfinder-tailscale-sg",
+    {
+      vpcId: vpc.id,
+      description: "Security group for Tailscale subnet router",
+      ingress: [
+        {
+          protocol: "tcp",
+          fromPort: 22,
+          toPort: 22,
+          cidrBlocks: securityConfig.allowedCidrBlocks,
+          description: "SSH access from allowed IPs",
+        },
+        {
+          protocol: "udp",
+          fromPort: 41641,
+          toPort: 41641,
+          cidrBlocks: ["0.0.0.0/0"],
+          description: "Tailscale UDP traffic",
+        },
+      ],
+      egress: [
+        {
+          protocol: "-1",
+          fromPort: 0,
+          toPort: 0,
+          cidrBlocks: ["0.0.0.0/0"],
+          description: "All outbound traffic",
+        },
+      ],
+      tags: {
+        ...commonTags,
+        Name: "pathfinder-tailscale-sg",
+        Type: "security-group",
+        Tier: "public",
       },
-      {
-        protocol: "udp",
-        fromPort: 41641,
-        toPort: 41641,
-        cidrBlocks: ["0.0.0.0/0"],
-        description: "Tailscale UDP traffic",
-      },
-    ],
-    egress: [
-      {
-        protocol: "-1",
-        fromPort: 0,
-        toPort: 0,
-        cidrBlocks: ["0.0.0.0/0"],
-        description: "All outbound traffic",
-      },
-    ],
-    tags: {
-      ...commonTags,
-      Name: "pathfinder-tailscale-sg",
-      Type: "security-group",
-      Tier: "public",
-    },
-  });
+    }
+  );
 
   // Allow Tailscale to access database
-  const tailscaleDatabaseAccess = new aws.ec2.SecurityGroupRule("tailscale-database-access", {
-    type: "ingress",
-    fromPort: 5432,
-    toPort: 5432,
-    protocol: "tcp",
-    sourceSecurityGroupId: tailscaleSecurityGroup.id,
-    securityGroupId: databaseSecurityGroup.id,
-    description: "Allow Tailscale router to access database for development",
-  });
+  const tailscaleDatabaseAccess = new aws.ec2.SecurityGroupRule(
+    "tailscale-database-access",
+    {
+      type: "ingress",
+      fromPort: 5432,
+      toPort: 5432,
+      protocol: "tcp",
+      sourceSecurityGroupId: tailscaleSecurityGroup.id,
+      securityGroupId: databaseSecurityGroup.id,
+      description: "Allow Tailscale router to access database for development",
+    }
+  );
 
   // ==========================================
   // VPC ENDPOINTS
@@ -353,75 +373,88 @@ export function createNetworking(config: CommonConfig) {
   });
 
   // Shared security group for VPC endpoints (allows both ECS and CodeBuild access)
-  const vpcEndpointSecurityGroup = new aws.ec2.SecurityGroup("pathfinder-vpc-endpoint-sg", {
-    vpcId: vpc.id,
-    description: "Security group for VPC endpoints (ECR, CodeBuild, CloudWatch)",
-    ingress: [
-      {
-        protocol: "tcp",
-        fromPort: 443,
-        toPort: 443,
-        securityGroups: [ecsSecurityGroup.id, codeBuildSecurityGroup.id],
-        description: "HTTPS access from ECS and CodeBuild",
+  const vpcEndpointSecurityGroup = new aws.ec2.SecurityGroup(
+    "pathfinder-vpc-endpoint-sg",
+    {
+      vpcId: vpc.id,
+      description:
+        "Security group for VPC endpoints (ECR, CodeBuild, CloudWatch)",
+      ingress: [
+        {
+          protocol: "tcp",
+          fromPort: 443,
+          toPort: 443,
+          securityGroups: [ecsSecurityGroup.id, codeBuildSecurityGroup.id],
+          description: "HTTPS access from ECS and CodeBuild",
+        },
+      ],
+      egress: [
+        {
+          protocol: "-1",
+          fromPort: 0,
+          toPort: 0,
+          cidrBlocks: ["0.0.0.0/0"],
+          description: "All outbound traffic",
+        },
+      ],
+      tags: {
+        ...commonTags,
+        Name: "pathfinder-vpc-endpoint-sg",
+        Type: "security-group",
       },
-    ],
-    egress: [
-      {
-        protocol: "-1",
-        fromPort: 0,
-        toPort: 0,
-        cidrBlocks: ["0.0.0.0/0"],
-        description: "All outbound traffic",
+    }
+  );
+
+  // ECR API VPC Endpoint (for ECS in private subnets)
+  const ecrApiVpcEndpoint = new aws.ec2.VpcEndpoint(
+    "pathfinder-ecr-api-endpoint",
+    {
+      vpcId: vpc.id,
+      serviceName: `com.amazonaws.${config.awsRegion}.ecr.api`,
+      vpcEndpointType: "Interface",
+      subnetIds: privateSubnetIds,
+      securityGroupIds: [vpcEndpointSecurityGroup.id],
+      tags: {
+        ...commonTags,
+        Name: "pathfinder-ecr-api-endpoint",
+        Type: "vpc-endpoint",
       },
-    ],
-    tags: {
-      ...commonTags,
-      Name: "pathfinder-vpc-endpoint-sg",
-      Type: "security-group",
-    },
-  });
+    }
+  );
 
-  // ECR API VPC Endpoint (both public and private subnets for CodeBuild + ECS)
-  const ecrApiVpcEndpoint = new aws.ec2.VpcEndpoint("pathfinder-ecr-api-endpoint", {
-    vpcId: vpc.id,
-    serviceName: `com.amazonaws.${config.awsRegion}.ecr.api`,
-    vpcEndpointType: "Interface",
-    subnetIds: [...privateSubnetIds, ...publicSubnetIds],
-    securityGroupIds: [vpcEndpointSecurityGroup.id],
-    tags: {
-      ...commonTags,
-      Name: "pathfinder-ecr-api-endpoint",
-      Type: "vpc-endpoint",
-    },
-  });
-
-  // ECR DKR VPC Endpoint (both public and private subnets for CodeBuild + ECS)
-  const ecrDkrVpcEndpoint = new aws.ec2.VpcEndpoint("pathfinder-ecr-dkr-endpoint", {
-    vpcId: vpc.id,
-    serviceName: `com.amazonaws.${config.awsRegion}.ecr.dkr`,
-    vpcEndpointType: "Interface",
-    subnetIds: [...privateSubnetIds, ...publicSubnetIds],
-    securityGroupIds: [vpcEndpointSecurityGroup.id],
-    tags: {
-      ...commonTags,
-      Name: "pathfinder-ecr-dkr-endpoint",
-      Type: "vpc-endpoint",
-    },
-  });
+  // ECR DKR VPC Endpoint (for ECS in private subnets)
+  const ecrDkrVpcEndpoint = new aws.ec2.VpcEndpoint(
+    "pathfinder-ecr-dkr-endpoint",
+    {
+      vpcId: vpc.id,
+      serviceName: `com.amazonaws.${config.awsRegion}.ecr.dkr`,
+      vpcEndpointType: "Interface",
+      subnetIds: privateSubnetIds,
+      securityGroupIds: [vpcEndpointSecurityGroup.id],
+      tags: {
+        ...commonTags,
+        Name: "pathfinder-ecr-dkr-endpoint",
+        Type: "vpc-endpoint",
+      },
+    }
+  );
 
   // CodeBuild VPC Endpoint (essential for CodeBuild to work in VPC)
-  const codebuildVpcEndpoint = new aws.ec2.VpcEndpoint("pathfinder-codebuild-endpoint", {
-    vpcId: vpc.id,
-    serviceName: `com.amazonaws.${config.awsRegion}.codebuild`,
-    vpcEndpointType: "Interface",
-    subnetIds: publicSubnetIds,
-    securityGroupIds: [vpcEndpointSecurityGroup.id],
-    tags: {
-      ...commonTags,
-      Name: "pathfinder-codebuild-endpoint",
-      Type: "vpc-endpoint",
-    },
-  });
+  const codebuildVpcEndpoint = new aws.ec2.VpcEndpoint(
+    "pathfinder-codebuild-endpoint",
+    {
+      vpcId: vpc.id,
+      serviceName: `com.amazonaws.${config.awsRegion}.codebuild`,
+      vpcEndpointType: "Interface",
+      subnetIds: publicSubnetIds,
+      securityGroupIds: [vpcEndpointSecurityGroup.id],
+      tags: {
+        ...commonTags,
+        Name: "pathfinder-codebuild-endpoint",
+        Type: "vpc-endpoint",
+      },
+    }
+  );
 
   // CloudWatch Logs VPC Endpoint (for CodeBuild logging)
   const logsVpcEndpoint = new aws.ec2.VpcEndpoint("pathfinder-logs-endpoint", {
@@ -444,7 +477,7 @@ export function createNetworking(config: CommonConfig) {
     natGatewayId: natGateway.id,
     publicSubnetIds,
     privateSubnetIds,
-    availabilityZones: availabilityZones.apply(azs => azs.names),
+    availabilityZones: availabilityZones.apply((azs) => azs.names),
     securityGroups: {
       alb: albSecurityGroup.id,
       ecs: ecsSecurityGroup.id,
@@ -464,4 +497,4 @@ export function createNetworking(config: CommonConfig) {
       logs: logsVpcEndpoint.id,
     },
   };
-} 
+}
