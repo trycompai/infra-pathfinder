@@ -73,5 +73,5 @@ USER nextjs
 EXPOSE 3000
 
 # Start the application
-CMD ["bun", "server.js"]
+CMD ["node", "server.js"]
 

@@ -59,10 +59,8 @@ phases:
         # Use Node.js Alpine for smaller image size
         FROM node:18-alpine AS runtime
 
-        # Install Bun
-        RUN apk add --no-cache curl bash && \
-            curl -fsSL https://bun.sh/install | bash && \
-            ln -s /root/.bun/bin/bun /usr/local/bin/bun
+        # Install dependencies for Bun
+        RUN apk add --no-cache curl bash
 
         WORKDIR /app
 
@@ -74,16 +72,21 @@ phases:
         # Copy the complete standalone build
         COPY .next/standalone ./
 
-        # Ensure proper permissions
+        # Create user and set permissions
         RUN addgroup -g 1001 -S nodejs && \
             adduser -S nextjs -u 1001 && \
             chown -R nextjs:nodejs /app
+
+        # Install Bun as the nextjs user in a globally accessible location
+        RUN curl -fsSL https://bun.sh/install | bash -s -- --install-dir=/usr/local && \
+            chmod +x /usr/local/bin/bun
 
         USER nextjs
 
         EXPOSE 3000
 
-        CMD ["bun", "server.js"]
+        # Use node to run the standalone server.js directly
+        CMD ["node", "server.js"]
         EOF
 
       - docker build -f Dockerfile.runtime -t $IMAGE_REPO_NAME:$IMAGE_TAG .
