@@ -69,7 +69,7 @@ echo -e "${YELLOW}🔍 Step 3: Verifying deployment...${NC}"
 echo -e "${YELLOW}⏳ Waiting for ECS deployment to stabilize...${NC}"
 aws ecs wait services-stable \
     --cluster "$CLUSTER_NAME" \
-    --services pathfinder-app
+    --services pathfinder
 
 # Get ALB DNS name
 alb_dns=$(aws elbv2 describe-load-balancers \
