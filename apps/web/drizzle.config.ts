@@ -6,14 +6,10 @@ export default defineConfig({
   out: "./src/db/migrations",
   dbCredentials: {
     url: process.env.DATABASE_URL!,
+    ssl: {
+      rejectUnauthorized: false,
+    },
   },
   verbose: true,
   strict: true,
-  driverOptions: {
-    connection: {
-      ssl: {
-        rejectUnauthorized: false,
-      },
-    },
-  },
 });
