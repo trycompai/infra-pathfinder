@@ -53,10 +53,6 @@ pulumi up --yes
 cd ../..
 echo -e "${GREEN}✅ Infrastructure updated${NC}"
 
-# Wait for infrastructure to stabilize
-echo -e "${YELLOW}⏳ Waiting for infrastructure to stabilize...${NC}"
-sleep 30
-
 # Step 2: Build and Deploy Application (includes migrations)
 echo -e "${YELLOW}🔨 Step 2: Building application (migrations + Next.js + Docker)...${NC}"
 app_build_id=$(aws codebuild start-build \
