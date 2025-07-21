@@ -59,9 +59,6 @@ phases:
         # Use Node.js Alpine for smaller image size
         FROM node:18-alpine AS runtime
 
-        # Install dependencies for Bun
-        RUN apk add --no-cache curl bash
-
         WORKDIR /app
 
         ENV NODE_ENV=production
@@ -72,20 +69,16 @@ phases:
         # Copy the complete standalone build
         COPY .next/standalone ./
 
-        # Create user and set permissions
+        # Create non-root user for security
         RUN addgroup -g 1001 -S nodejs && \
             adduser -S nextjs -u 1001 && \
             chown -R nextjs:nodejs /app
-
-        # Install Bun as the nextjs user in a globally accessible location
-        RUN curl -fsSL https://bun.sh/install | bash -s -- --install-dir=/usr/local && \
-            chmod +x /usr/local/bin/bun
 
         USER nextjs
 
         EXPOSE 3000
 
-        # Use node to run the standalone server.js directly
+        # Use node to run the standalone server.js
         CMD ["node", "server.js"]
         EOF
 
