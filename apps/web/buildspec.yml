@@ -51,25 +51,38 @@ phases:
       - ls -la .next/standalone/server.js || echo "❌ server.js not found"
 
       - echo "=== BUILDING DOCKER IMAGE WITH BUILD ARTIFACTS ==="
+      # Note: We're using a simplified runtime Dockerfile here because the build artifacts
+      # are already created. For local development or standard CI/CD, use the main Dockerfile
+      # which includes the full multi-stage build process.
       - |
         cat > Dockerfile.runtime << 'EOF'
-        FROM public.ecr.aws/lambda/nodejs:18-x86_64
-        WORKDIR /app
+        # Use Node.js Alpine for smaller image size
+        FROM node:18-alpine AS runtime
 
-        # Install unzip and Bun
-        RUN yum update -y && yum install -y unzip && \
+        # Install Bun
+        RUN apk add --no-cache curl bash && \
             curl -fsSL https://bun.sh/install | bash && \
             ln -s /root/.bun/bin/bun /usr/local/bin/bun
+
+        WORKDIR /app
 
         ENV NODE_ENV=production
         ENV NEXT_TELEMETRY_DISABLED=1
         ENV PORT=3000
         ENV HOSTNAME="0.0.0.0"
 
-        # Copy the complete standalone build (includes server.js, dependencies, static files, and public files)
+        # Copy the complete standalone build
         COPY .next/standalone ./
 
+        # Ensure proper permissions
+        RUN addgroup -g 1001 -S nodejs && \
+            adduser -S nextjs -u 1001 && \
+            chown -R nextjs:nodejs /app
+
+        USER nextjs
+
         EXPOSE 3000
+
         CMD ["bun", "server.js"]
         EOF
 
