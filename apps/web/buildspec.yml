@@ -46,6 +46,9 @@ phases:
       - echo "Next.js standalone build requires manual copying of static files..."
       - cp -r public .next/standalone/ || echo "No public folder found"
       - cp -r .next/static .next/standalone/.next/ || echo "No static folder found"
+      - echo "Copying Prisma client to standalone build..."
+      - mkdir -p .next/standalone/src/generated
+      - cp -r src/generated/client .next/standalone/src/generated/ || echo "Warning: Custom Prisma client not found"
       - echo "✅ Standalone files prepared"
 
       - echo "=== VERIFYING BUILD ARTIFACTS ==="
