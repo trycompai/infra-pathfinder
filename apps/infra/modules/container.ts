@@ -144,6 +144,29 @@ export function createContainer(
     }
   );
 
+  // Add policy for Secrets Manager access to task execution role
+  const taskExecutionSecretsPolicy = new aws.iam.RolePolicy(
+    "pathfinder-task-execution-secrets-policy",
+    {
+      role: taskExecutionRole.id,
+      policy: database.secretArn.apply((secretArn) =>
+        JSON.stringify({
+          Version: "2012-10-17",
+          Statement: [
+            {
+              Effect: "Allow",
+              Action: [
+                "secretsmanager:GetSecretValue",
+                "secretsmanager:DescribeSecret",
+              ],
+              Resource: secretArn,
+            },
+          ],
+        })
+      ),
+    }
+  );
+
   // ECS Task Role for application permissions
   const taskRole = new aws.iam.Role("pathfinder-task-role", {
     name: "pathfinder-ecs-task-role",

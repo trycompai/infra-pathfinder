@@ -67,9 +67,52 @@ echo -e "${YELLOW}🔍 Step 3: Verifying deployment...${NC}"
 
 # Wait for ECS service to stabilize after the build updated it
 echo -e "${YELLOW}⏳ Waiting for ECS deployment to stabilize...${NC}"
-aws ecs wait services-stable \
+
+# Set a timeout of 10 minutes (600 seconds) for the wait
+if ! timeout 600 aws ecs wait services-stable \
     --cluster "$CLUSTER_NAME" \
-    --services pathfinder
+    --services pathfinder; then
+    
+    echo -e "${RED}❌ ECS service failed to stabilize within 10 minutes${NC}"
+    
+    # Get the current service status for debugging
+    echo -e "${RED}Current service status:${NC}"
+    aws ecs describe-services \
+        --cluster "$CLUSTER_NAME" \
+        --services pathfinder \
+        --query 'services[0].{desired:desiredCount,running:runningCount,pending:pendingCount,status:status}' \
+        --output table
+    
+    # Get recent events
+    echo -e "${RED}Recent service events:${NC}"
+    aws ecs describe-services \
+        --cluster "$CLUSTER_NAME" \
+        --services pathfinder \
+        --query 'services[0].events[0:5]' \
+        --output json
+    
+    # Check for failed tasks
+    echo -e "${RED}Checking for task failures:${NC}"
+    TASK_ARNS=$(aws ecs list-tasks \
+        --cluster "$CLUSTER_NAME" \
+        --service-name pathfinder \
+        --desired-status STOPPED \
+        --query 'taskArns[0:3]' \
+        --output json)
+    
+    if [ "$TASK_ARNS" != "[]" ] && [ -n "$TASK_ARNS" ]; then
+        aws ecs describe-tasks \
+            --cluster "$CLUSTER_NAME" \
+            --tasks $TASK_ARNS \
+            --query 'tasks[*].{taskArn:taskArn,stoppedReason:stoppedReason}' \
+            --output table
+    fi
+    
+    echo -e "${RED}❌ Deployment failed - ECS service is not stable${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✅ ECS service is stable${NC}"
 
 # Get ALB DNS name
 alb_dns=$(aws elbv2 describe-load-balancers \

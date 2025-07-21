@@ -92,10 +92,15 @@ phases:
 
   post_build:
     commands:
+      - echo "Pushing images to ECR..."
       - docker push $REPOSITORY_URI:$IMAGE_TAG
       - docker push $REPOSITORY_URI:latest
       - echo "Updating ECS service to deploy new image..."
-      - aws ecs update-service --cluster $ECS_CLUSTER_NAME --service $ECS_SERVICE_NAME --force-new-deployment
+      - |
+        if ! aws ecs update-service --cluster $ECS_CLUSTER_NAME --service $ECS_SERVICE_NAME --force-new-deployment; then
+          echo "❌ Failed to update ECS service"
+          exit 1
+        fi
       - echo "Writing image definitions file..."
       - 'printf "[{\"name\":\"pathfinder-app\",\"imageUri\":\"%s\"}]" $REPOSITORY_URI:$IMAGE_TAG > imagedefinitions.json'
 
