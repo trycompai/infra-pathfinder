@@ -1,5 +1,5 @@
 ---
-description:
-globs:
-alwaysApply: false
+alwaysApply: true
 ---
+
+Do not disable static site generation for next. We want to make sure we keep this.
