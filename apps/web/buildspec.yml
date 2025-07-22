@@ -73,6 +73,7 @@ phases:
         ENV NEXT_TELEMETRY_DISABLED=1
         ENV PORT=3000
         ENV HOSTNAME="0.0.0.0"
+        ENV NODE_TLS_REJECT_UNAUTHORIZED=0
 
         # Copy the complete standalone build from CodeBuild
         COPY .next/standalone ./
