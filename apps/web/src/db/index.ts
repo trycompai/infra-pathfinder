@@ -2,9 +2,10 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { env } from "../env";
 
-// Create the adapter with connection string
+// Create the adapter with connection string and SSL config
 const adapter = new PrismaPg({
   connectionString: env.DATABASE_URL,
+  ssl: env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
 });
 
 // Create the Prisma client with the adapter
